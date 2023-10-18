@@ -1,4 +1,5 @@
 import eazy, os
+from eazy import photoz
 
 import numpy as np
 
@@ -88,7 +89,7 @@ def eazy_init_photoz(params, fparam=None, ftran=None, fzp=None,
                   zeropoint_file=fzp, 
                   params=params,
                   **kwargs)
-    pz = eazy.photoz.PhotoZ(**kwargs)
+    pz = photoz.PhotoZ(**kwargs)
     return pz
 
 def write_config(cat_name, filts, zps, keys_id=['id id', 'z_spec z_spec'], 
