@@ -32,9 +32,9 @@ filts_HST = {
 }
 
 ftempl_labeldict = {#! use ; to indicate modifications
-    'blue_sfhz_13': "BLSFH",
-    #'carnall_sfhz_13': "CASFH",
-    #'corr_sfhz_13': "COSFH",
+    #'blue_sfhz_13': "BLSFH",
+    'carnall_sfhz_13': "CASFH",
+    'corr_sfhz_13': "COSFH",
     #'eazy_v1.3.spectra': "EAZ3",
     #'EMextreme': "EMEx",
     #'EMlines': "EMLi",

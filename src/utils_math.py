@@ -51,6 +51,8 @@ def rebin(x_og, y_og, x_new, y_err):
     x_oversample = np.linspace(x_og[0]/2-x_og[1]/2, x_og[-1]*3/2-x_og[-2]/2, len(x_og)*oversampleRate)
     y_oversample = np.interp(x_oversample, x_og, y_og)
     y_err_oversample = np.interp(x_oversample, x_og, y_err)
+    #replace zero-values with nan
+    y_oversample[y_oversample == 0] = np.nan
     y_err_oversample_resp = y_err_oversample**-1
     """plt.scatter(x_oversample, y_oversample, s=1)
     plt.plot(x_oversample, y_oversample+y_err_oversample, color='r')
