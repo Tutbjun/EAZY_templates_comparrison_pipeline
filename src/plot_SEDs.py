@@ -192,8 +192,8 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     plt.show()"""
 
     #rebin to target intervals
-    targetFlux, _ = rebin(x_fit, y_fit, targetWave,y_fill_delta)#!ERRROR: interpolation is not correct
-    targetFlux_yfill_top = np.interp(targetWave, x_fill_top, y_fill_top)#!not correct interpolation method for errorbars...
+    targetFlux, _ = rebin(x_fit, y_fit, targetWave,y_fill_delta)
+    targetFlux_yfill_top = np.interp(targetWave, x_fill_top, y_fill_top)
     targetFlux_yfill_bot = np.interp(targetWave, x_fill_bot, y_fill_bot)
     """plt.plot(targetWave, targetFlux_yfill_top)
     plt.plot(targetWave, targetFlux_yfill_bot)
@@ -258,7 +258,7 @@ def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0)
 
         mosaicLen = ceil(len(mode_ftempl_lbls)/mosTiling)
         figsize = (1*figwidth,1*figwidth/mosTiling*mosaicLen)
-        tiling = (mosaicLen,mosTiling)
+        tiling = (mosaicLen,round(mosTiling))
         if len(mode_ftempl_lbls) < mosTiling:
             figsize = (1*figwidth/mosTiling*len(mode_ftempl_lbls),1*figwidth/mosTiling)
             tiling = (1,len(mode_ftempl_lbls))

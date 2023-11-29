@@ -3,6 +3,8 @@ CONFIG:
   rebinWidth: 0.08
   zCharacteristic: 5.0
   fontsize: 8.0
+  eazy_outfolder: "eazy-output"
+  colorAfterScore: True
 MOSAICZ:
   mosTiling: 4.0
   zMax: 16.5

@@ -32,22 +32,23 @@ filts_HST = {
 }
 
 ftempl_labeldict = {#! use ; to indicate modifications
-    #'blue_sfhz_13': "BLSFH",
+    'blue_sfhz_13': "BLSFH",
     'carnall_sfhz_13': "CASFH",
     'corr_sfhz_13': "COSFH",
-    #'eazy_v1.3.spectra': "EAZ3",
-    #'EMextreme': "EMEx",
-    #'EMlines': "EMLi",
-    #'EMLines;linearcomb': "EMLi;LC",
-    #'fsps_45k': "F45k",
-    #'fsps_60k': "F60k",
-    #'fsps_45k;linearcomb': "F45k;LC",
-    #'fsps_45k;0.3removed': "F45k;0.3r",
+    'eazy_v1.3.spectra': "EAZ3",
+    'EMextreme': "EMEx",
+    'EMlines': "EMLi",
+    'EMLines;linearcomb': "EMLi;LC",
+    'fsps_45k': "F45k",
+    'fsps_60k': "F60k",
+    'fsps_45k;linearcomb': "F45k;LC",
+    'fsps_45k;0.3removed': "F45k;0.3r",
 }
 
-catalogue_paths = {
-    "hlsp_jades_jwst_nircam_goods-s-deep_photometry_v1.0_catalog_large_withSpec.fits": "gds/jades/phot"
-}
+"""catalogue_paths = {
+    "hlsp_jades_jwst_nircam_goods-s-deep_photometry_v1.0_catalog_large_withSpec.fits": "gds/jades/initial/phot"
+
+}"""
 
 ####################### FUNCTIONS #######################
 
@@ -100,16 +101,6 @@ def get_templates():
     templ_paths = [f"templates/{e}.param" for e in ftempl_strs]
     return ftempl_strs, ftempl_labels, ftempl_labeldict, templ_paths
 
-
-
-def get_catalogue_path(catalogue_inname):
-    try:
-        return os.path.join(os.getenv('astrodata'),catalogue_paths[catalogue_inname], catalogue_inname)
-    except KeyError:
-        print("Available catalogues: ", catalogue_paths.keys())
-        raise KeyError("No matching catalogue path found for: ", catalogue_inname)
-
-
 import helper_module as hmod
 import eazy_routines as ez
 import numpy as np
@@ -122,10 +113,48 @@ def get_mv_reddening():
     mw_reddening = ez.get_atten_dict(filts)
     return mw_reddening
 
-def catalogue_2_eazytable(catalogue_inpath, cat_out_name, z_min_limit=0.0):
+def get_hdu_names(catalogue_inpath):
+    hdu_names = []
+    with fits.open(catalogue_inpath) as hdul:
+        for h in hdul:
+            try:
+                hdu_names.append(h.name)
+            except AttributeError:
+                hdu_names.append(None)
+    return hdu_names
+
+def get_secondarry_zpec(reverting_catalogues):
+    print("ATTENTION!: No z_spec column found in catalogue. Finding z_spec from catalogue alternatives.")
+    for cat in reverting_catalogues:
+        hdu_names = get_hdu_names(cat)
+        for i,h in enumerate(hdu_names):
+            if i == 0: continue
+            print("Trying hdu: ", h, ", in catalogue: ", cat)
+            tab = Table.read(cat, hdu=i)
+            cols = [str(c).lower() for c in tab.colnames]
+            if 'z_spec' in cols:
+                print("Found z_spec in: ", cat)
+                zspec_naming = tab.colnames[np.where(np.array(cols) == 'z_spec')[0][0]]
+                id_namings = ["NIRCam_ID", "nircam_id", "id", "ID"]
+                for id_naming in id_namings:
+                    if id_naming in tab.colnames:
+                        #rename naming to ID, z_spec
+                        tab.rename_column(id_naming, 'ID')
+                        tab.rename_column(zspec_naming, 'z_spec')
+                        #remove rows with masked "ID" or "z_spec"
+                        tab = tab[~tab['ID'].mask]
+                        tab = tab[~tab['z_spec'].mask]
+                        return tab['ID', 'z_spec']
+    print("No z_spec found in any catalogues!")
+    raise ValueError("No z_spec found in any catalogues!")
+    
+def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogues=[], z_min_limit=0.0):
     mw_reddening = get_mv_reddening()
-    tab_in = Table.read(catalogue_inpath, hdu=6)
-    tab_redshifts = Table.read(catalogue_inpath, hdu=9)
+    hdu_names = get_hdu_names(catalogue_inpath)
+    hdu_tab_in = np.where(np.array(hdu_names) == 'CIRC')[0][0]
+    hdu_tab_redshifts = np.where(np.array(hdu_names) == 'PHOTOZ')[0][0]
+    tab_in = Table.read(catalogue_inpath, hdu=hdu_tab_in)
+    tab_redshifts = Table.read(catalogue_inpath, hdu=hdu_tab_redshifts)
     # load fluxes
     # CIRC1: 0.10 arcsec aperture (see README)
     ext = '_CIRC1'
@@ -135,8 +164,11 @@ def catalogue_2_eazytable(catalogue_inpath, cat_out_name, z_min_limit=0.0):
     cols_fluxes = list(np.vstack([cols_f, cols_fe]).T.flatten())
     cols = list(np.insert(cols_fluxes, 0, ['ID', 'RA', 'DEC', 'z_spec']))
 
+    #check wether z_spec is available
+    if 'z_spec' not in tab_redshifts.colnames:
+        tab_redshifts = get_secondarry_zpec(reverting_catalogues)
     tab_in = jointab(tab_in, tab_redshifts['ID', 'z_spec'], join_type='inner', keys='ID')
-    tab_out = tab_in[cols]
+    tab_out = tab_in[cols]#! Is this filtering fluxes out of filters that might have data??
 
     # convert from nJy to uJy
     # and apply MW reddening
@@ -291,17 +323,27 @@ def get_spectra(spec_dir, input_df, ftempl_strs):
 
 import utils_math
 
+def clean_spectra(wave, flux, flux_err):
+    #find nans in flux and flux_err
+    nan_index = np.where(np.isnan(flux) | np.isnan(flux_err) | np.isnan(wave))
+    #remove nans
+    wave = np.delete(wave, nan_index)
+    flux = np.delete(flux, nan_index)
+    flux_err = np.delete(flux_err, nan_index)
+    return wave, flux, flux_err
+
 def rebin_spectra(spec_data, rebinWidth=0.1):
     
     wave = spec_data['wave']
     flux = spec_data['flux']
     flux_err = spec_data['flux_err']
     #remove nans
-    for i in range(len(wave)-1,-1,-1):
+    """for i in range(len(wave)-1,-1,-1):
         if np.isnan(flux[i]) or np.isnan(flux_err[i]):
             wave = np.delete(wave, i)
             flux = np.delete(flux, i)
-            flux_err = np.delete(flux_err, i)
+            flux_err = np.delete(flux_err, i)"""
+    wave, flux, flux_err = clean_spectra(wave, flux, flux_err)
     #wave_new, flux_new, flux_err_new = rebin_spec(wave, flux, flux_err, xlo=wave.min(), xhi=wave.max(), bw=rebinWidth)
     wave_new = np.arange(wave.min(), wave.max()+rebinWidth, rebinWidth)
     flux_new, flux_err_new = utils_math.rebin(wave, flux, wave_new, y_err=flux_err)

@@ -1,0 +1,15 @@
+#
+
+
+
+
+
+
+
+
+devotes:
+    Current task: get the raw jades catalogue into EAZY
+    this assumes that the raw jades has a proper calibration pipeline (basicly on assumption on good instrumental calibration)
+then:
+    fix some todos? (for example rebinning)
+    paper writing

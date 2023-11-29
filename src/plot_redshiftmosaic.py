@@ -30,7 +30,7 @@ zCharacteristic = zCharacteristic
 etasStartIndex = 0
 etas = []
 
-from copy import copy
+from copy import copy, deepcopy
 from math import ceil
 import numpy as np
 import matplotlib.pyplot as plt
@@ -98,7 +98,7 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
         mosaicLen = ceil(len(mode_ftempl_lbls)/mosTiling)
         
         figsize = (1*figwidth,1*figwidth/mosTiling*mosaicLen)
-        tiling = (mosaicLen,mosTiling)
+        tiling = (mosaicLen,round(mosTiling))
         if len(mode_ftempl_lbls) < mosTiling:
             figsize = (1*figwidth/mosTiling*len(mode_ftempl_lbls),1*figwidth/mosTiling)
             tiling = (1,len(mode_ftempl_lbls))
@@ -186,6 +186,7 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
             bias = bias_s[mode][i]
             scatter = scatter_s[mode][i]
             eta = etas_s[mode][i]
+            
 
 
             #outpath = outpaths.format(ftempl=ftempl, runTime=runTime)

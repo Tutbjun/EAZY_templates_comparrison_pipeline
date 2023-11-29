@@ -23,14 +23,15 @@ def plot(df_out, ftempl_strs, runTime):
     fig, ax = plt.subplots(figsize=(10,2))
     c=0
     maxZSpec = 0
+    maxZPhot = 0
     yTicks = []
-    for i in range(204):
+    for i in range(len(redshiftPoints)):
         delta = redshiftPointsDelta[i]
         sigma_phot = redshiftPointsErr[i]
         z_spec = redshiftPointsSpec[i]
         z_phot = redshiftPoints[i]
         id = redshiftPointsIDs[i]
-        if delta-sigma_phot < 0.0: continue
+        if delta-(sigma_phot*1.3) < 0.0: continue
         if z_spec < 0.0: continue
         if z_phot < 0.0: continue
         if delta < 1: continue
@@ -40,9 +41,10 @@ def plot(df_out, ftempl_strs, runTime):
         label = None
         if c == 0: label = "z_phot - all templates"
         plt.errorbar(z_phot, -c, xerr=sigma_phot, fmt='x', color='k', capsize=2, label=label)
+        if z_phot > maxZPhot: maxZPhot = z_phot
         label = None
         if c == 0: label = "z_spec"
-        plt.plot([z_spec,z_spec],[-c-0.5,-c+0.5],color='r',linestyle='--',label=label,linewidth=3)
+        plt.plot([z_spec,z_spec],[-c-0.5,-c+0.5],color='r',linestyle='--',label=label,linewidth=2)
         if z_spec > maxZSpec: maxZSpec = z_spec
         plt.plot([0,100],[-c,-c],color='k',linestyle='-',linewidth=1,alpha=0.1)
 
@@ -61,11 +63,14 @@ def plot(df_out, ftempl_strs, runTime):
     for i,id in enumerate(yTicks):
         ax.annotate(str(id) + "  ", xy=(0, -i+0.7), xycoords='data', fontsize=6, ha='right', va='top',rotation=20)
 
-    plt.xlim(0,maxZSpec+0.5)
+    plt.xlim(0,max(maxZSpec+0.5,maxZPhot+1))
     plt.xlabel("Redshift (z)")
     plt.ylabel("Object")
     ax.yaxis.set_label_coords(-0.05,0.5)
-    plt.legend()
+
+    #set upper margin to 0.01
+    #ax.set_ylim(-c-0.5,2)
+    plt.legend(loc='lower right')
 
     #savefig
     plt.savefig(f"figures/forpaper/consistent_outliers_{runTime}.png",dpi=300,bbox_inches='tight')
