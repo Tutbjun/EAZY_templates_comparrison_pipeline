@@ -31,7 +31,7 @@ def plot(df_out, ftempl_strs, runTime):
         z_spec = redshiftPointsSpec[i]
         z_phot = redshiftPoints[i]
         id = redshiftPointsIDs[i]
-        if delta-(sigma_phot*1.3) < 0.0: continue
+        if delta-(sigma_phot*1.4) < 0.0: continue
         if z_spec < 0.0: continue
         if z_phot < 0.0: continue
         if delta < 1: continue

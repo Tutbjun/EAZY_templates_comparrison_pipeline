@@ -40,6 +40,8 @@ from matplotlib.ticker import MultipleLocator
 def plot(df_out,ftempl_strs,ftempl_labels,runTime):
     global etasStartIndex
     global etas
+    etasStartIndex = 0
+    etas = []
     #precalc stats
     deltaZ_s = {'default':[], 'modified':[]}
     deltaZ_all_s = {'default':[], 'modified':[]}
@@ -173,6 +175,7 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
             mask = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
             redChar['z_spec'] = redChar['z_spec'][mask]
             redChar['z_phot'] = redChar['z_phot'][mask]
+            print(f"Have {len(redChar['z_spec'])} objects in {ftempl}")
             """deltaZ = (redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec'])
             deltaZ_all = (redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec'])
             outliers = (deltaZ > 0.15) | (deltaZ < -0.15)

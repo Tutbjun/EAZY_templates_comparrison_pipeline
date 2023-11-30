@@ -142,8 +142,10 @@ def get_secondarry_zpec(reverting_catalogues):
                         tab.rename_column(id_naming, 'ID')
                         tab.rename_column(zspec_naming, 'z_spec')
                         #remove rows with masked "ID" or "z_spec"
-                        tab = tab[~tab['ID'].mask]
-                        tab = tab[~tab['z_spec'].mask]
+                        try: 
+                            tab = tab[~tab['ID'].mask]
+                            tab = tab[~tab['z_spec'].mask]
+                        except AttributeError: pass
                         return tab['ID', 'z_spec']
     print("No z_spec found in any catalogues!")
     raise ValueError("No z_spec found in any catalogues!")
@@ -167,6 +169,8 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
     #check wether z_spec is available
     if 'z_spec' not in tab_redshifts.colnames:
         tab_redshifts = get_secondarry_zpec(reverting_catalogues)
+    #print len of z_spec
+    print("z_spec length: ", len(tab_redshifts['z_spec']))
     tab_in = jointab(tab_in, tab_redshifts['ID', 'z_spec'], join_type='inner', keys='ID')
     tab_out = tab_in[cols]#! Is this filtering fluxes out of filters that might have data??
 

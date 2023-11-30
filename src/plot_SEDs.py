@@ -5,6 +5,8 @@ from astropy import units as u
 from utils_math import rebin
 
 def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None):
+    global fontsize
+    fontsize_local = fontsize/2
     ftempl_lbl = ftempl_labeldict[ftempl]
     spec_data = photZs['specs'][id_cat]
     index = np.where(photZs['input_df'][ftempl]['id'] == id_cat)[0][0]
@@ -38,7 +40,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
         obj.set_alpha(0)
         #obj.set_linewidth(0)#!might need change
         #print color
-        print(obj.get_color())
+        #print(obj.get_color())
         if k == 1: 
             obj.set_markersize(3.5)#photometry
             obj.set_alpha(0.8)
@@ -102,7 +104,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     axis.plot(tempspec_zphot[0], tempspec_zphot[1], c='r', lw=1, ls='--',alpha=0.5,zorder=20)
     #if i == 0: axis.set_title(f'{includeChi2s[j]*100:.0f}%-tile $\chi^2$', fontsize=fontsize*2)
     if includeChi2Val != None:
-        plt.title(f'{includeChi2Val*100:.0f}%-tile $\chi^2$', fontsize=fontsize*2)
+        plt.title(f'{includeChi2Val*100:.0f}%-tile $\chi^2$', fontsize=fontsize_local*2)
     #set y max lim to 1.5 times higher
     
 
@@ -111,11 +113,12 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     #annotate to the right of the frame; chi2, objid, redshift, delta_z
     anXs = [1.02]*5
     anYs = np.linspace(0.0, len(anXs)*0.07, len(anXs))+(0.5-(len(anXs)*0.07/2))
-    axis.annotate(f'{ftempl_lbl}', xy=(anXs[4],anYs[4]), xycoords='axes fraction', fontsize=fontsize*1.25, ha='left', va='center', textcoords='offset points', xytext=(0,0))#TODO: move to left
-    axis.annotate(f'$\chi^2$≈{"{:.1e}".format(chi2)}', xy=(anXs[0],anYs[0]), xycoords='axes fraction', fontsize=fontsize, ha='left', va='center', textcoords='offset points', xytext=(0,0))
-    axis.annotate(f'ID={id_cat}', xy=(anXs[1],anYs[1]), xycoords='axes fraction', fontsize=fontsize*0.8, ha='left', va='center', textcoords='offset points', xytext=(0,0))
-    axis.annotate(f'$z_{{spec}}$≈{z_spec:.1f}', xy=(anXs[2],anYs[2]), xycoords='axes fraction', fontsize=fontsize, ha='left', va='center', textcoords='offset points', xytext=(0,0))
-    axis.annotate(f'$\Delta z$≈{z_phot-z_spec:.1f}', xy=(anXs[3],anYs[3]), xycoords='axes fraction', fontsize=fontsize, ha='left', va='center', textcoords='offset points', xytext=(0,0))
+    chi2red = chi2/(len(spec_data['flux'])-1)
+    axis.annotate(f'{ftempl_lbl}', xy=(anXs[4],anYs[4]), xycoords='axes fraction', fontsize=fontsize_local*1.25, ha='left', va='center', textcoords='offset points', xytext=(0,0))#TODO: move to left
+    axis.annotate(f'$\chi^2_{{red}}$≈{"{:.1e}".format(chi2red)}', xy=(anXs[0],anYs[0]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
+    axis.annotate(f'ID={id_cat}', xy=(anXs[1],anYs[1]), xycoords='axes fraction', fontsize=fontsize_local*0.8, ha='left', va='center', textcoords='offset points', xytext=(0,0))
+    axis.annotate(f'$z_{{spec}}$≈{z_spec:.1f}', xy=(anXs[2],anYs[2]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
+    axis.annotate(f'$\Delta z$≈{z_phot-z_spec:.1f}', xy=(anXs[3],anYs[3]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
 
     #plot spec data
     
@@ -224,12 +227,21 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     axis.lines[3].set_ydata(targetFlux)
     axis.collections[5]._paths[0].verticies = np.array([targetFlux_xfill, targetFlux_yfill]).T
 
+    #if y is badly scaled:
+    ylim_max = axis.get_ylim()[1]
+    ylim_min = axis.get_ylim()[0]
+    xlim_max = axis.get_xlim()[1]
+    #see if ylim_max is higher than targetFlux within panel
+    if ylim_max > np.max(targetFlux[np.where(targetWave <  xlim_max)]):
+        axis.set_ylim(ylim_min, np.max(targetFlux[np.where(targetWave <  xlim_max)]))
+
     #set non-log axis
     axis.set_xscale('linear')
     ylabel = axis.get_ylabel().replace('\\mu', 'n')
-    axis.set_ylabel(ylabel, fontsize=fontsize)
-    axis.set_yticklabels([f'{tick*1e3:.0f}' for tick in axis.get_yticks()], fontsize=fontsize)
-    axis.set_xticklabels([f'{tick:.1f}' for tick in axis.get_xticks()], fontsize=fontsize)
+    axis.set_ylabel(ylabel, fontsize=fontsize_local)
+    axis.set_yticklabels([f'{tick*1e3:.0f}' for tick in axis.get_yticks()], fontsize=fontsize_local)
+    axis.set_xticklabels([f'{tick:.1f}' for tick in axis.get_xticks()], fontsize=fontsize_local)
+    
 from math import ceil
 from copy import copy
 
@@ -275,7 +287,7 @@ def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0)
     
         mode_output_df = [photZs['output_df'][ftempl] for ftempl in mode_ftempl_strs]    
         for i, df_out, ftempl in zip(range(len(mode_ftempl_strs)), mode_output_df, mode_ftempl_strs):
-            print(ftempl)
+            #print(ftempl)
             chi2s = df_out['z_phot_chi2']
             chi2s = [chi2 if chi2 > 0 else 0 for chi2 in chi2s]
             chi2s = [chi2 if df_out['z_spec'][i] > 0 else 0 for i, chi2 in enumerate(chi2s)]
@@ -290,7 +302,7 @@ def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0)
             IDs, chi2s = df_out['ID'][sort], np.array(chi2s)[sort]
 
             for j, chi2, id_cat in zip(range(len(sort)), chi2s, IDs):
-                print(f"Chi2: {chi2:.2f} ID: {id_cat}")
+                #print(f"Chi2: {chi2:.2f} ID: {id_cat}")
                 axis = axss[j][i//int(mosTiling)][i%int(mosTiling)]
                 
                 plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2s[j])
