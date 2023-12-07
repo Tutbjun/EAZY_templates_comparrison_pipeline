@@ -312,3 +312,121 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
         ax = fig.add_axes([0,0,1,1])
         ax.axis('off')
         ax.imshow(img)
+
+import pandas as pd
+
+def table(df_out,ftempl_strs,ftempl_labels,runTime):
+    global etasStartIndex
+    global etas
+    etasStartIndex = 0
+    etas = []
+    #precalc stats
+    deltaZ_s = {'default':[], 'modified':[]}
+    deltaZ_all_s = {'default':[], 'modified':[]}
+    outliers_s = {'default':[], 'modified':[]}
+    outliers_all_s = {'default':[], 'modified':[]}
+    bias_s = {'default':[], 'modified':[]}
+    bias_all_s = {'default':[], 'modified':[]}
+    scatter_s = {'default':[], 'modified':[]}
+    scatter_all_s = {'default':[], 'modified':[]}
+    etas_s = {'default':[], 'modified':[]}
+    etas_all_s = {'default':[], 'modified':[]}
+
+    for mode in ['default', 'modified']:
+        mode_ftempl_lbls = copy(ftempl_labels)
+        mode_ftempl_strs = copy(ftempl_strs)
+        if mode == 'modified': 
+            mode_ftempl_lbls = [s for s in mode_ftempl_lbls if ";" in s]
+            mode_ftempl_strs = [s for s in mode_ftempl_strs if ";" in s]
+        if mode == 'default': 
+            mode_ftempl_lbls = [s for s in mode_ftempl_lbls if ";" not in s]
+            mode_ftempl_strs = [s for s in mode_ftempl_strs if ";" not in s]
+        if len(mode_ftempl_lbls) == 0: continue
+        for i, ftempl in enumerate(mode_ftempl_strs):
+            if ftempl not in df_out.keys():
+                continue
+            redshiftTbl = df_out[ftempl]
+            validMask = (~np.isnan(redshiftTbl['z_spec'])) & (~np.isnan(redshiftTbl['z_phot']) & (redshiftTbl['z_phot'] > 0))
+            redshiftTbl = redshiftTbl[validMask]
+            redChar = {
+                'z_spec': np.array(redshiftTbl['z_spec']),
+                'z_phot': np.array(redshiftTbl['z_phot']),
+            }
+            maskChar = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec']))
+            redChar['z_spec'] = redChar['z_spec'][maskChar]
+            redChar['z_phot'] = redChar['z_phot'][maskChar]
+            deltaZ = (redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec'])
+            deltaZ_s[mode].append(deltaZ)
+            deltaZ_all = (redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec'])
+            deltaZ_all_s[mode].append(deltaZ_all)
+            outliers = (deltaZ > 0.15) | (deltaZ < -0.15)
+            outliers_s[mode].append(outliers)
+            outliers_all = (deltaZ_all > 0.15) | (deltaZ_all < -0.15)
+            outliers_all_s[mode].append(outliers_all)
+            bias = np.mean(deltaZ)
+            bias_s[mode].append(bias)
+            bias_all = np.mean(deltaZ_all)
+            bias_all_s[mode].append(bias_all)
+            scatter = np.std(deltaZ)
+            scatter_s[mode].append(scatter)
+            scatter_all = np.std(deltaZ_all)
+            scatter_all_s[mode].append(scatter_all)
+            eta = np.sum(outliers)/len(outliers)
+            etas_s[mode].append(eta)
+            eta_all = np.sum(outliers_all)/len(outliers_all)
+            etas_all_s[mode].append(eta_all)
+
+    df = {}
+    insertions = {
+        #'deltaZ': 'deltaZ_s[{mode}]',
+        #'deltaZ_all': 'deltaZ_all_s[{mode}]',
+        #'outliers': 'outliers_s[{mode}]',
+        #'outliers_all': 'outliers_all_s[{mode}]',
+        'bias': 'bias_s[{mode}]',
+        'bias_all': 'bias_all_s[{mode}]',
+        'scatter': 'scatter_s[{mode}]',
+        'scatter_all': 'scatter_all_s[{mode}]',
+        'eta': 'etas_s[{mode}]',
+        'eta_all': 'etas_all_s[{mode}]',
+        #chi2
+    }
+    """for key in k
+        df[key] = []"""
+    for mode in ['default', 'modified']:
+        for key in insertions.keys():
+            df[key] = eval(insertions[key].format(mode=repr(mode)))
+        """#df['deltaZ'] += deltaZ_s[mode]
+        #df['deltaZ_all'] += deltaZ_all_s[mode]
+        #df['outliers'] += outliers_s[mode]
+        #df['outliers_all'] += outliers_all_s[mode]
+        df['bias'] += bias_s[mode]
+        df['bias_all'] += bias_all_s[mode]
+        df['scatter'] += scatter_s[mode]
+        df['scatter_all'] += scatter_all_s[mode]
+        df['eta'] += etas_s[mode]
+        df['eta_all'] += etas_all_s[mode]"""
+    df = pd.DataFrame(df)
+    print(df)
+    #save latex to txt file
+    with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'w') as f:
+        f.write(df.to_latex(index=False))
+    texlines = []
+    with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'r') as f:
+        texlines = f.readlines()
+    for i in range(len(texlines)):
+        if texlines[i].startswith("\\begin{tabular}"):
+            texlines[i] = "\\begin{deluxetable*}{cccc}[tp]\n"
+        if texlines[i].startswith("\\toprule"):
+            texlines[i] = "\\label{tab:zs_stats}\n\\tabletypesize{\\scriptsize}\n\\tablewidth{0pt}\n\\tablecaption{temp}\n"
+            header = texlines[i+1]
+            header = header.split(" \\\\\n")[0].split(" & ")
+            texlines[i+1] = "\\tablehead{\n" + "&".join(["\\colhead{" + h + "}" for h in header]) + "} \\\n\\startdata\n"
+        if texlines[i].startswith("\\midrule"):
+            texlines[i] = ""
+        if texlines[i].startswith("\\bottomrule"):
+            texlines[i] = "\\enddata\n\\tablecomments{temp}\n\\end{deluxetable*}"
+        if texlines[i].startswith("\\end{tabular}"):
+            texlines[i] = ""
+    os.remove(f'./figures/forpaper/zs_table_{runTime}.tex')
+    with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'w') as f:
+        f.writelines(texlines)

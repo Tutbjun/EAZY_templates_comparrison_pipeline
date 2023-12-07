@@ -1,6 +1,6 @@
 CONFIG:
   zmin: 1.0
-  rebinWidth: 0.08
+  rebinWidth: 0.05
   zCharacteristic: 5.0
   fontsize: 8.0
   eazy_outfolder: "eazy-output"

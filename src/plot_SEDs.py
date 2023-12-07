@@ -3,8 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy import units as u
 from utils_math import rebin
+from matplotlib.colors import LinearSegmentedColormap
 
-def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None):
+def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None, logy=False,color_after_chi=False):
     global fontsize
     fontsize_local = fontsize/2
     ftempl_lbl = ftempl_labeldict[ftempl]
@@ -44,10 +45,11 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
         if k == 1: 
             obj.set_markersize(3.5)#photometry
             obj.set_alpha(0.8)
+            if color_after_chi: obj.set_alpha(0)
             #remove lines arround point
             obj.set_markeredgewidth(0)
         if k == 2: 
-            obj.set_markersize(3.5)#photometry
+            obj.set_markersize(3.5)#photometry, bad points?
             obj.set_alpha(0.25)
             obj.set_markeredgewidth(0)
         if k == 0: 
@@ -57,11 +59,13 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
             obj.set_linewidth(1)#best fit
             obj.set_alpha(0.5)
             obj.set_zorder(19)
+            #if color_after_chi: obj.set_alpha(0)
         #obj.set_visible(False)
     #and errorbars
     for k,obj in enumerate(axis.collections):
-        obj.set_alpha(0.5)
+        obj.set_alpha(0.5)#errorbar
         #obj.set_linewidth(0)#!might need change
+        if color_after_chi: obj.set_alpha(0)
         """if k == 5:
             obj._edgecolors = np.zeros(obj._edgecolors.shape)
             #set color pink
@@ -78,6 +82,11 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
             obj.set_linewidth(0)
         if k in [3]:
             obj.set_visible(True)
+    
+    data_phot = pz_out.show_fit(id=id_cat, zshow=z_phot, get_spec=True, show_fnu=True)
+    #fit_chi2red = data_phot['chi2']/(sum(data_phot['valid'])-1)
+    
+
         
     #and fill_between (polygons)
     for obj in axis.patches:
@@ -87,8 +96,8 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     
     #!plot actuall guess
     #TODO: fix
-    data = pz_out.show_fit(id=id_cat, zshow=z_phot, get_spec=True, show_fnu=True)
-    tempspec_zphot = [np.array((data['templz']*u.AA).to(u.um)), np.array((data['templf']*u.uJy).to(u.uJy))]
+    
+    tempspec_zphot = [np.array((data_phot['templz']*u.AA).to(u.um)), np.array((data_phot['templf']*u.uJy).to(u.uJy))]
     #limit to axis.get_xlim()
     tempspec_zphot = [tempspec_zphot[0][tempspec_zphot[0] > axis.get_xlim()[0]], tempspec_zphot[1][tempspec_zphot[0] > axis.get_xlim()[0]]]
     tempspec_zphot = [tempspec_zphot[0][tempspec_zphot[0] < axis.get_xlim()[1]], tempspec_zphot[1][tempspec_zphot[0] < axis.get_xlim()[1]]]
@@ -99,9 +108,9 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     targetWave = np.linspace(targetWave[0], targetWave[-1], len(targetWave))
     #use rebin function
     #tempspec_zphot = [targetWave, np.interp(targetWave, tempspec_zphot[0], tempspec_zphot[1])]
-    flux_rebin, _ = rebin(tempspec_zphot[0], tempspec_zphot[1], targetWave, np.ones(len(data['templf']), dtype=np.float64))#!Don't think there is a error for best template fit? Please check:)
+    flux_rebin, _ = rebin(tempspec_zphot[0], tempspec_zphot[1], targetWave, np.ones(len(data_phot['templf']), dtype=np.float64))#!Don't think there is a error for best template fit? Please check:)
     tempspec_zphot = [targetWave, flux_rebin]
-    axis.plot(tempspec_zphot[0], tempspec_zphot[1], c='r', lw=1, ls='--',alpha=0.5,zorder=20)
+    axis.plot(tempspec_zphot[0], tempspec_zphot[1], c='tab:orange', lw=1, ls='--',alpha=0.9,zorder=20)
     #if i == 0: axis.set_title(f'{includeChi2s[j]*100:.0f}%-tile $\chi^2$', fontsize=fontsize*2)
     if includeChi2Val != None:
         plt.title(f'{includeChi2Val*100:.0f}%-tile $\chi^2$', fontsize=fontsize_local*2)
@@ -113,7 +122,9 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     #annotate to the right of the frame; chi2, objid, redshift, delta_z
     anXs = [1.02]*5
     anYs = np.linspace(0.0, len(anXs)*0.07, len(anXs))+(0.5-(len(anXs)*0.07/2))
-    chi2red = chi2/(len(spec_data['flux'])-1)
+    chi2red = chi2/(sum(data_phot['valid'])-1)
+    modelChi2red = np.sum((data_phot['model'][data_phot['valid']]-data_phot['fobs'][data_phot['valid']])**2/(data_phot['efobs'][data_phot['valid']]**2))/(sum(data_phot['valid'])-1)
+    print("Chi2 diff:", chi2red-modelChi2red)
     axis.annotate(f'{ftempl_lbl}', xy=(anXs[4],anYs[4]), xycoords='axes fraction', fontsize=fontsize_local*1.25, ha='left', va='center', textcoords='offset points', xytext=(0,0))#TODO: move to left
     axis.annotate(f'$\chi^2_{{red}}$≈{"{:.1e}".format(chi2red)}', xy=(anXs[0],anYs[0]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
     axis.annotate(f'ID={id_cat}', xy=(anXs[1],anYs[1]), xycoords='axes fraction', fontsize=fontsize_local*0.8, ha='left', va='center', textcoords='offset points', xytext=(0,0))
@@ -235,27 +246,60 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None)
     if ylim_max > np.max(targetFlux[np.where(targetWave <  xlim_max)]):
         axis.set_ylim(ylim_min, np.max(targetFlux[np.where(targetWave <  xlim_max)]))
 
+    #if ylog
+    if logy:
+        axis.set_yscale('log')
+        axis.set_ylim(ylim_max/100, ylim_max*5)
+
+    data_spec = pz_out.show_fit(id=id_cat, zshow=z_spec, get_spec=True, show_fnu=True)
+    if color_after_chi:
+        #replace the photometry points with a color representing that points chi
+        #get chis
+        v = data_spec['valid']
+        fobs = data_spec['fobs'][v]
+        ferr = data_spec['efobs'][v]
+        fgues = data_spec['model'][v]
+        w = data_spec['pivot'][v]
+        mask = np.where(fobs >= axis.get_ylim()[0]) or np.where(fgues >= axis.get_ylim()[0])
+        fobs = fobs[mask]
+        ferr = ferr[mask]
+        fgues = fgues[mask]
+        w = w[mask]
+        chi2s = [(p-g)**2/(e**2) for p,g,e in zip(fobs,fgues,ferr)]
+        chi2s = np.array(chi2s)
+        chi2s = chi2s[~np.isnan(chi2s)]
+        print(np.sum(chi2s))
+        chi2s = np.log10(chi2s)+1
+        print(np.sum(chi2s)/len(chi2s))
+        colors = [(0, 0, 0), (1, 0, 0)] # first color is black, last is red
+        cmap = LinearSegmentedColormap.from_list(
+            "Custom", colors, N=20)
+        for i, chi2 in enumerate(chi2s):
+            axis.scatter(w[i]/10000, fobs[i], c=cmap(chi2/chi2s.max()), s=10, zorder=20)
+            axis.scatter(w[i]/10000, fgues[i], c='tab:orange', s=10, zorder=19)
+            axis.errorbar(w[i]/10000, fobs[i], yerr=ferr[i], c=cmap(chi2/chi2s.max()), zorder=20)
+
     #set non-log axis
     axis.set_xscale('linear')
     ylabel = axis.get_ylabel().replace('\\mu', 'n')
     axis.set_ylabel(ylabel, fontsize=fontsize_local)
     axis.set_yticklabels([f'{tick*1e3:.0f}' for tick in axis.get_yticks()], fontsize=fontsize_local)
     axis.set_xticklabels([f'{tick:.1f}' for tick in axis.get_xticks()], fontsize=fontsize_local)
+    axis.set_xlabel('$\lambda_{{obs}}$ [$\mu$m]', fontsize=fontsize_local)
     
 from math import ceil
 from copy import copy
 
-def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0):
+def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0,idx=None):
     #fig, axss = plt.subplots(len(ftempl_strs), 2, figsize=(16, 4*len(ftempl_strs)), dpi=300, width_ratios=[2, 1])
-    includeChi2s = [0.1,0.5,0.8,0.9,1]
-    #TODO: reformatting to have 2x4 panels with every template in one panel (simular to mosaic panels)
+    if idx == None:
+        includeChi2s = [0.1,0.5,0.8,0.9,1]
+    else: includeChi2s = np.full(len(idx), np.nan)
+    
     figwidth = 183*mm
-    fontsize = 4
-    """fig, axss = plt.subplots(len(ftempl_strs), len(includeChi2s), figsize=(16, 4*len(ftempl_strs)), dpi=300, sharex=True)
-    if len(axss.shape) == 1:
-        axss = np.array([axss])"""
-    #set vertical spacing =0
-
+    global fontsize
+    fontsize_local = fontsize/2
+    plotSucces = False
 
     for mode in ['default', 'modified']:
         mode_ftempl_lbls = copy(ftempl_labels)
@@ -288,18 +332,34 @@ def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0)
         mode_output_df = [photZs['output_df'][ftempl] for ftempl in mode_ftempl_strs]    
         for i, df_out, ftempl in zip(range(len(mode_ftempl_strs)), mode_output_df, mode_ftempl_strs):
             #print(ftempl)
-            chi2s = df_out['z_phot_chi2']
-            chi2s = [chi2 if chi2 > 0 else 0 for chi2 in chi2s]
-            chi2s = [chi2 if df_out['z_spec'][i] > 0 else 0 for i, chi2 in enumerate(chi2s)]
-            ids = df_out['ID']
-            chi2s = [chi2 if id in photZs['specs'].keys() else 0 for id, chi2 in zip(ids, chi2s)]
-            sort = list(np.argsort(chi2s))[chi2s.count(0):]
-            #remove if chi2 < 0:
-            include = [int(inc*(len(sort)-1)) for inc in includeChi2s]
-            sort = np.array(sort)[include]
+            if idx == None:#have sort by chi2
+                chi2s = df_out['z_phot_chi2']
+                chi2s = [chi2 if chi2 > 0 else 0 for chi2 in chi2s]
+                chi2s = [chi2 if df_out['z_spec'][i] > 0 else 0 for i, chi2 in enumerate(chi2s)]
+                ids = df_out['ID']
+                chi2s = [chi2 if id in photZs['specs'].keys() else 0 for id, chi2 in zip(ids, chi2s)]
+                sort = list(np.argsort(chi2s))[chi2s.count(0):]
+                #remove if chi2 < 0:
+                include = [int(inc*(len(sort)-1)) for inc in includeChi2s]
+                sort = np.array(sort)[include]
+            else:
+                include = []
+                for inc in idx:
+                    if len((index:=np.where(df_out['ID'] == inc)[0])) > 0:
+                        include.append(index[0])
+                sort = np.array(include)
             del include
-
-            IDs, chi2s = df_out['ID'][sort], np.array(chi2s)[sort]
+            for j in range(sort.shape[0]-1,0-1,-1):
+                #if spec not exist
+                if df_out['ID'][sort[j]] not in photZs['specs'].keys():
+                    sort = np.delete(sort, j)
+            if len(sort) == 0: 
+                print(f"no spec for {ftempl}")
+                continue
+            IDs = df_out['ID'][sort]
+            if idx == None: chi2s = np.array(chi2s)[sort]
+            else: chi2s = np.full(len(sort), np.nan)
+            
 
             for j, chi2, id_cat in zip(range(len(sort)), chi2s, IDs):
                 #print(f"Chi2: {chi2:.2f} ID: {id_cat}")
@@ -309,13 +369,15 @@ def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0)
                 if i//mosTiling != len(axss[j])-1: 
                     axis.set_xlabel('')
                     axis.set_xticklabels([])
-                else: axis.set_xlabel('$\lambda$ [$\mu$m]', fontsize=fontsize)
+                else: axis.set_xlabel('$\lambda$ [$\mu$m]', fontsize=fontsize_local)
+            plotSucces = True
                 
         
-        
+        if not plotSucces: continue
         plt.clf()
         plt.show()
-        for fig,chi2 in zip(figs,includeChi2s):
+        for i,fig,chi2 in zip(range(len(figs)),figs,includeChi2s):
+            if idx != None: chi2 = idx[i]
             fig.savefig(f'./figures/forpaper/seds_{mode}_{chi2}_{runTime}.png', dpi=300, bbox_inches='tight', transparent=True)
             fig.clf()
             plt.close(fig)
