@@ -150,19 +150,84 @@ def get_secondarry_zpec(reverting_catalogues):
     print("No z_spec found in any catalogues!")
     raise ValueError("No z_spec found in any catalogues!")
     
-def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogues=[], z_min_limit=0.0):
+def rename_cols2convention(tab):
+    #first rename Id, ra, dec, z_spec
+    
+    def rename_col(tab, potentials, new):
+        if new in potentials:
+            potentials.pop(np.where(np.array(potentials) == new)[0][0])
+        found = False
+        if new in tab.colnames: return tab
+        for n in potentials:
+            if n in tab.colnames:
+                if found: raise ValueError("Degenaerate Column names!")
+                found = True
+                tab.rename_column(n, new)
+        if found: return tab
+        print("No column found for: ", new)
+        return tab
+    tab = rename_col(tab, ["NIRCam_ID", "nircam_id", "id", "ID"], 'ID')
+    tab = rename_col(tab, ['ra', 'RA'], 'RA')
+    tab = rename_col(tab, ['dec', 'DEC'], 'DEC')
+    tab = rename_col(tab, ['z_spec', 'zspec', 'z_Spec'], 'z_spec')
+    #now rename fluxes
+    exts = ['_CIRC1', 'tot_1']
+    for ext in exts:
+        cols_dummy = hmod.get_matches(ext, tab.columns, exclude='_ei')
+        cols_f = np.sort(hmod.get_matches(ext, cols_dummy, exclude='_e'))
+        cols_fe = np.sort(hmod.get_matches('_e', cols_dummy))
+        if len(cols_f) == 0: continue
+        if len(cols_fe) == 0: continue
+        break
+    #rename
+    for c in cols_f:
+        tab.rename_column(c, c.split('_')[0] + '_flux')
+    for c in cols_fe:
+        tab.rename_column(c, c.split('_')[0] + '_err')
+    return tab
+
+def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogues=[], z_min_limit=0.0, filters=None):
     mw_reddening = get_mv_reddening()
     hdu_names = get_hdu_names(catalogue_inpath)
-    hdu_tab_in = np.where(np.array(hdu_names) == 'CIRC')[0][0]
-    hdu_tab_redshifts = np.where(np.array(hdu_names) == 'PHOTOZ')[0][0]
+    try: 
+        hdu_tab_in = np.where(np.array(hdu_names) == 'CIRC')[0][0]
+    except IndexError:
+        if len(hdu_names) <= 2:
+            hdu_tab_in = 1
+    try:
+        hdu_tab_redshifts = np.where(np.array(hdu_names) == 'PHOTOZ')[0][0]
+    except IndexError:
+        if len(hdu_names) <= 2:
+            hdu_tab_redshifts = 1
     tab_in = Table.read(catalogue_inpath, hdu=hdu_tab_in)
     tab_redshifts = Table.read(catalogue_inpath, hdu=hdu_tab_redshifts)
     # load fluxes
+    tab_in = rename_cols2convention(tab_in)
+    tab_redshifts = rename_cols2convention(tab_redshifts)
+    cols_f = np.sort(hmod.get_matches('_flux', tab_in.columns))
+    cols_fe = np.sort(hmod.get_matches('_err', tab_in.columns))
+    if filters is not None:#do a mask wor wich to include
+        mask = np.full(len(cols_f), False)
+        for i,f in enumerate(cols_f):
+            if f.split('_')[0].upper() in filters:
+                mask[i] = True
+        if np.sum(mask) != len(mask):
+            print("Warning: The following filters where not used from catalogue: ", np.array(cols_f)[~mask])
+        cols_f = cols_f[mask]
+        cols_fe = cols_fe[mask]
     # CIRC1: 0.10 arcsec aperture (see README)
-    ext = '_CIRC1'
-    cols_dummy = hmod.get_matches(ext, tab_in.columns, exclude='_ei')
-    cols_f = np.sort(hmod.get_matches(ext, cols_dummy, exclude='_e'))
-    cols_fe = np.sort(hmod.get_matches('_e', cols_dummy))
+    """exts = ['_CIRC1', 'tot_1']
+    for ext in exts:
+        success = False
+        try:
+            cols_dummy = hmod.get_matches(ext, tab_in.columns, exclude='_ei')
+            cols_f = np.sort(hmod.get_matches(ext, cols_dummy, exclude='_e'))
+            cols_fe = np.sort(hmod.get_matches('_e', cols_dummy))
+            if len(cols_f) == 0: raise ValueError
+            if len(cols_fe) == 0: raise ValueError
+            success = True
+        except ValueError: continue
+        if success: break"""
     cols_fluxes = list(np.vstack([cols_f, cols_fe]).T.flatten())
     cols = list(np.insert(cols_fluxes, 0, ['ID', 'RA', 'DEC', 'z_spec']))
 
@@ -171,7 +236,8 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
         tab_redshifts = get_secondarry_zpec(reverting_catalogues)
     #print len of z_spec
     print("z_spec length: ", len(tab_redshifts['z_spec']))
-    tab_in = jointab(tab_in, tab_redshifts['ID', 'z_spec'], join_type='inner', keys='ID')
+    if 'z_spec' not in tab_in.colnames:
+        tab_in = jointab(tab_in, tab_redshifts['ID', 'z_spec'], join_type='inner', keys='ID')
     tab_out = tab_in[cols]#! Is this filtering fluxes out of filters that might have data??
 
     # convert from nJy to uJy
@@ -193,14 +259,13 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
         if tab_out['z_spec'][i] < z_min_limit:
             tab_out['z_spec'][i] = -1.0
         
-    # rename columns
-    for c in cols_f:
-        cnew = c.replace(ext, '_flux')
-        tab_out.rename_column(c, cnew)
+    # make flux columns uppercased
+    for c in cols_fluxes:
+        if 'flux' in c:
+            tab_out.rename_column(c, c.split('_')[0].upper() + '_flux')
+        elif 'err' in c:
+            tab_out.rename_column(c, c.split('_')[0].upper() + '_err')
 
-    for c in cols_fe:
-        cnew = c.replace(ext+'_e', '_err')
-        tab_out.rename_column(c, cnew)
 
     #=== apply MW reddening
     #atten_dict = ez.get_atten_dict(filts_eazyres, filts_str)
