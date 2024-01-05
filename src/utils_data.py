@@ -54,7 +54,7 @@ def load_photoz_input(cat_out_name, template_path, out_path, out_name, params, f
 
 from tqdm import tqdm
 
-def get_output_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, filts, zps, keys_id, paramsDict):
+def get_output_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     df_dict = {}
     for tpath, opath, oname in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading output table...", total=len(templ_paths)):
@@ -66,7 +66,7 @@ def get_output_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, f
     print()
     return df_dict
 
-def get_output_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, filts, zps, keys_id, paramsDict):
+def get_output_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     pz_dict = {}
     for tpath, opath, oname in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading PHOTZ output and gridding templatespace...", total=len(templ_paths)):
@@ -84,7 +84,7 @@ def get_output_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, f
     print()
     return pz_dict
 
-def get_input_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, filts, zps, keys_id, paramsDict):
+def get_input_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     df_dict = {}
     for tpath, opath, oname in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading input table...", total=len(templ_paths)):
@@ -96,11 +96,11 @@ def get_input_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, fi
     print()
     return df_dict
 
-def get_input_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, filts, zps, keys_id, paramsDict):
+def get_input_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     pz_dict = {}
     for tpath, opath, oname, in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading PHOTZ input and gridding templatespace...", total=len(templ_paths)):
-        params = paramsDict[oname]
+        params = paramDict[oname]
         pz = load_photoz_input(
             cat_out_name,
             template_path=tpath, out_path=opath, out_name=oname,
@@ -110,4 +110,43 @@ def get_input_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, fi
         pz_dict[oname] = pz
     print()
     return pz_dict
+
+def get_train_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+    
+    #pz_dict = {}
+    #for tpath, opath, oname, in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading PHOTZ input and gridding templatespace...", total=len(templ_paths)):
+    opath = "temp/eazy-output-optimizer"
+    oname = "eazy"
+    params = utils_astro.gen_params(
+        cat_path=train_path, templ_path=matrixtemplate, out_path=opath,
+        doCosmo=False, doUtils=False
+        )
+    filt_num, fnames = ez.write_config(f'{cat_out_name}_{oname}', filts, zps, keys_id,
+                                        out_path=opath)
+    pz = ez.eazy_init_photoz(
+            params,
+            ftran=opath + '/' + cat_out_name + "_" + oname + '.translate',
+            fzp=opath + '/' + cat_out_name + "_" + oname + '.zeropoint',
+            )
+    #pz_dict[oname] = pz
+    print()
+    return pz
+
+def get_test_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+    return get_train_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, test_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate)
+    opath = "temp/eazy-output-optimizer"
+    oname = "eazy"
+    params = utils_astro.gen_params(
+        cat_path=test_path, templ_path=matrixtemplate, out_path=oname,
+        doCosmo=False, doUtils=False
+        )
+    filt_num, fnames = ez.write_config(f'{cat_out_name}_{oname}', filts, zps, keys_id,
+                                        out_path=opath)
+    pz = ez.eazy_init_photoz(
+            params,
+            ftran=opath + '/' + cat_out_name + "_" + oname + '.translate',
+            fzp=opath + '/' + cat_out_name + "_" + oname + '.zeropoint',
+            )
+    print()
+    return pz
 

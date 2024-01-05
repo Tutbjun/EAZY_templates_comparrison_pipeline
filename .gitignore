@@ -165,3 +165,5 @@ astrodata
 *.translate
 *.zeropoint
 *.fits
+*.csv
+*.png

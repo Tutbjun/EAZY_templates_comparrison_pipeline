@@ -109,6 +109,24 @@ class PowerLinesegment(Linesegment):
 
 
 from scipy import integrate
+from numba import jit
+#@jit(nopython=True)
+def _ingt(linex1,linex2,func,x1,x2):
+    toadd = 0
+    if (x1 < linex1) & (x2 < linex1):#if the line is completely outside the integration
+        toadd = np.nan
+    elif (x1 > linex2) & (x2 > linex2):#if the line is completely outside the integration
+        toadd = np.nan
+    elif (x1 <= linex1) & (linex2 <= x2):#if the line is completely within the integration
+        toadd = integrate.quad(func, linex1, linex2)[0]
+    elif (linex1 < x1) & (x2 < linex2):#if range is within the line
+        toadd = integrate.quad(func, x1, x2)[0]
+    elif (x1 < linex1) & (x2 < linex2):#if line is partially within the integration
+        toadd = integrate.quad(func, linex1, x2)[0]
+    elif (linex1 < x1) & (linex2 < x2):#if line is partially within the integration
+        toadd = integrate.quad(func, x1, linex2)[0]
+    return toadd
+    
 
 def integrate_line(linesegments, x1, x2):
     """
@@ -118,7 +136,10 @@ def integrate_line(linesegments, x1, x2):
     sum = 0
     for line in linesegments:
         func = line.func
-        if (x1 < line.x1) & (x2 < line.x1):#if the line is completely outside the integration
+        toadd = _ingt(line.x1,line.x2,func,x1,x2)
+        if np.isnan(toadd): continue
+        sum += toadd
+        """if (x1 < line.x1) & (x2 < line.x1):#if the line is completely outside the integration
             continue
         elif (x1 > line.x2) & (x2 > line.x2):#if the line is completely outside the integration
             continue
@@ -129,10 +150,11 @@ def integrate_line(linesegments, x1, x2):
         elif (x1 < line.x1) & (x2 < line.x2):#if line is partially within the integration
             sum += integrate.quad(func, line.x1, x2)[0]
         elif (line.x1 < x1) & (line.x2 < x2):#if line is partially within the integration
-            sum += integrate.quad(func, x1, line.x2)[0]
+            sum += integrate.quad(func, x1, line.x2)[0]"""
     return sum
 
-def rebin(x_og, y_og, x_new, y_err):#reworked and better
+from tqdm import tqdm
+def rebin(x_og, y_og, x_new, y_err, progress=False):#reworked and better
     """ 
     Rebin the spectrum to get higher SN
     """
@@ -146,17 +168,22 @@ def rebin(x_og, y_og, x_new, y_err):#reworked and better
     y_og[zeros] = np.nan
     y_err[zeros] = np.nan
     #create linesegments
-    linesegments = []
+    linesegments = np.zeros(len(x_og)-1, dtype=object)
     for i in range(len(x_og)-1):
-        linesegments.append(Linesegment(x_og[i], y_og[i], x_og[i+1], y_og[i+1]))
+        linesegments[i] = Linesegment(x_og[i], y_og[i], x_og[i+1], y_og[i+1])
+        #linesegments.append(Linesegment(x_og[i], y_og[i], x_og[i+1], y_og[i+1]))
     #create linesegments for errors as well
-    linesegments_err = []
+    linesegments_err = np.zeros(len(x_og)-1, dtype=object)
     for i in range(len(x_og)-1):
-        linesegments_err.append(PowerLinesegment(x_og[i], y_err[i], x_og[i+1], y_err[i+1], -2))
+        linesegments_err[i] = PowerLinesegment(x_og[i], y_err[i], x_og[i+1], y_err[i+1], -2)
+        #linesegments_err.append(PowerLinesegment(x_og[i], y_err[i], x_og[i+1], y_err[i+1], -2))
     #now rebin the spectrum
     y_new = np.zeros(len(x_new), dtype=np.float64)
     y_err_new = np.zeros(len(x_new), dtype=np.float64)
-    for i_n,x in enumerate(x_new):
+    def nullfunc(*args, **kwargs): return args[0]
+    if progress: _tqdm_ = tqdm
+    else: _tqdm_ = nullfunc
+    for i_n,x in _tqdm_(enumerate(x_new), total=len(x_new)):
         #upper lower bin limits
         if i_n != 0:                x1 = (x_new[i_n-1]+x_new[i_n])/2
         else:                       x1 = x_new[0] - (x_new[1]-x_new[0])/2

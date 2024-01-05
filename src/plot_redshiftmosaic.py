@@ -346,18 +346,20 @@ def table(df_out,ftempl_strs,ftempl_labels,runTime):
             if ftempl not in df_out.keys():
                 continue
             redshiftTbl = df_out[ftempl]
-            validMask = (~np.isnan(redshiftTbl['z_spec'])) & (~np.isnan(redshiftTbl['z_phot']) & (redshiftTbl['z_phot'] > 0))
+            validMask = (~np.isnan(redshiftTbl['z_spec'])) & (~np.isnan(redshiftTbl['z_phot']) & (redshiftTbl['z_phot'] > 0) & (redshiftTbl['z_spec'] > 0))
             redshiftTbl = redshiftTbl[validMask]
             redChar = {
                 'z_spec': np.array(redshiftTbl['z_spec']),
                 'z_phot': np.array(redshiftTbl['z_phot']),
             }
-            maskChar = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec']))
+            maskChar = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
             redChar['z_spec'] = redChar['z_spec'][maskChar]
             redChar['z_phot'] = redChar['z_phot'][maskChar]
             deltaZ = (redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec'])
             deltaZ_s[mode].append(deltaZ)
             deltaZ_all = (redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec'])
+            #goodMask = (~np.isnan(deltaZ_all)) & (~np.isnan(redshiftTbl['z_spec'])) % (~np.isinf(deltaZ_all))
+            #deltaZ_all = deltaZ_all[goodMask]
             deltaZ_all_s[mode].append(deltaZ_all)
             outliers = (deltaZ > 0.15) | (deltaZ < -0.15)
             outliers_s[mode].append(outliers)
@@ -376,25 +378,71 @@ def table(df_out,ftempl_strs,ftempl_labels,runTime):
             eta_all = np.sum(outliers_all)/len(outliers_all)
             etas_all_s[mode].append(eta_all)
 
-    df = {}
-    insertions = {
-        #'deltaZ': 'deltaZ_s[{mode}]',
-        #'deltaZ_all': 'deltaZ_all_s[{mode}]',
-        #'outliers': 'outliers_s[{mode}]',
-        #'outliers_all': 'outliers_all_s[{mode}]',
-        'bias': 'bias_s[{mode}]',
-        'bias_all': 'bias_all_s[{mode}]',
-        'scatter': 'scatter_s[{mode}]',
-        'scatter_all': 'scatter_all_s[{mode}]',
-        'eta': 'etas_s[{mode}]',
-        'eta_all': 'etas_all_s[{mode}]',
-        #chi2
-    }
-    """for key in k
-        df[key] = []"""
-    for mode in ['default', 'modified']:
+        df = {}
+        def rnd_p(x):
+            #print(x)
+            def rnd(x:float):
+                #print("ROunDING")
+                significantDigit = np.floor(np.log10(np.abs(x))) - 1
+                rounded = round(x, -int(significantDigit))#, int(significantDigit)
+                #to string
+                rounded = str(rounded)
+                if significantDigit < 0:
+                    #print(rounded.split("."))
+                    #print(rounded)
+                    #print([rounded.split(".")[1][:-int(significantDigit)]])
+                    rounded = ".".join([rounded.split(".")[0]] + [rounded.split(".")[1][:-int(significantDigit)]])
+                    #print(rounded)
+                    #print([rounded.split(".")])
+                    #print(rounded)
+                    leadingDigits = rounded.split(".")[1]
+                    while leadingDigits.startswith("0"): leadingDigits = leadingDigits[1:]
+                    while len(leadingDigits) < 2:
+            
+                        #print("loop " + leadingDigits)
+                        rounded += "0"
+                        leadingDigits = rounded.split(".")[1]
+                        while leadingDigits.startswith("0"): leadingDigits = leadingDigits[1:]
+                    #print(rounded)
+                return rounded
+            try:
+                float(x)
+                int(x)
+            except:
+                try:
+                    float(x[0])
+                    int(x[0])
+                    r = [rnd(i) for i in x]
+                    return r#, s
+                except:
+                    return x#, None
+            return rnd(x)
+            
+        insertions = {
+            #'deltaZ': 'deltaZ_s[{mode}]',
+            #'deltaZ_all': 'deltaZ_all_s[{mode}]',
+            #'outliers': 'outliers_s[{mode}]',
+            #'outliers_all': 'outliers_all_s[{mode}]',
+            '$\overline{\Delta z}_{z>5}$': 'bias_s[{mode}]',
+            '$\overline{\Delta z}_{z>1}$': 'bias_all_s[{mode}]',
+            '$\sigma\left(\Delta z_{z>5}\\right)$': 'scatter_s[{mode}]',
+            '$\sigma\left(\Delta z_{z>1}\\right)$': 'scatter_all_s[{mode}]',
+            '$\eta_{z>5}$': 'etas_s[{mode}]',
+            '$\eta_{z>1}$': 'etas_all_s[{mode}]',
+            #chi2
+        }
+        """for key in k
+            df[key] = []"""
+    #for mode in ['default', 'modified']:
+        df = {}
+        df['templ.'] = [
+            f'${s}$' for s in mode_ftempl_lbls
+        ]
+        
         for key in insertions.keys():
+            #x, digit = rnd_p(eval(insertions[key].format(mode=repr(mode))))
             df[key] = eval(insertions[key].format(mode=repr(mode)))
+        print(df)
         """#df['deltaZ'] += deltaZ_s[mode]
         #df['deltaZ_all'] += deltaZ_all_s[mode]
         #df['outliers'] += outliers_s[mode]
@@ -405,28 +453,76 @@ def table(df_out,ftempl_strs,ftempl_labels,runTime):
         df['scatter_all'] += scatter_all_s[mode]
         df['eta'] += etas_s[mode]
         df['eta_all'] += etas_all_s[mode]"""
-    df = pd.DataFrame(df)
-    print(df)
-    #save latex to txt file
-    with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'w') as f:
-        f.write(df.to_latex(index=False))
-    texlines = []
-    with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'r') as f:
-        texlines = f.readlines()
-    for i in range(len(texlines)):
-        if texlines[i].startswith("\\begin{tabular}"):
-            texlines[i] = "\\begin{deluxetable*}{cccc}[tp]\n"
-        if texlines[i].startswith("\\toprule"):
-            texlines[i] = "\\label{tab:zs_stats}\n\\tabletypesize{\\scriptsize}\n\\tablewidth{0pt}\n\\tablecaption{temp}\n"
-            header = texlines[i+1]
-            header = header.split(" \\\\\n")[0].split(" & ")
-            texlines[i+1] = "\\tablehead{\n" + "&".join(["\\colhead{" + h + "}" for h in header]) + "} \\\n\\startdata\n"
-        if texlines[i].startswith("\\midrule"):
-            texlines[i] = ""
-        if texlines[i].startswith("\\bottomrule"):
-            texlines[i] = "\\enddata\n\\tablecomments{temp}\n\\end{deluxetable*}"
-        if texlines[i].startswith("\\end{tabular}"):
-            texlines[i] = ""
-    os.remove(f'./figures/forpaper/zs_table_{runTime}.tex')
-    with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'w') as f:
-        f.writelines(texlines)
+        df = pd.DataFrame(df)
+        for key in df.keys():
+            for i in range(len(df[key])):
+                df[key][i] = rnd_p(df[key][i])
+        cmap = mpl.cm.RdYlGn
+        colortable = []
+        for key in list(df.keys())[1:]:
+            min = np.min(np.abs(df[key].values.astype(float))**-1)
+            max = np.max(np.abs(df[key].values.astype(float))**-1)
+            colortable.append([])
+            for i in range(len(df[key])):
+                colortable[-1].append(np.array(cmap((np.abs(float(df[key][i]))**-1 - min)/(max-min))[:-1]))
+                #colortable[-1][-1][-1] = 0.1
+                colortable[-1][-1] *= 1.2
+                colortable[-1][-1] = np.clip(colortable[-1][-1], 0, 1)
+        colortable = np.array(colortable).transpose(1,0,2)
+
+        #print(df)
+        #save latex to txt file
+        with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'w') as f:
+            f.write(df.to_latex(index=False))
+        texlines = []
+        with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'r') as f:
+            texlines = f.readlines()
+        for i in range(len(texlines)):
+            if texlines[i].startswith("\\begin{tabular}"):
+                texlines[i] = "\\begin{deluxetable}{c|cccccc}[tp]\n"
+            if texlines[i].startswith("\\toprule"):
+                texlines[i] = "\\label{tab:zs_stats}\n\\tabletypesize{\\scriptsize}\n\\tablewidth{0pt}\n\\tablecaption{temp}\n"
+                header = texlines[i+1]
+                header = header.split(" \\\\\n")[0].split(" & ")
+                texlines[i+1] = "\\tablehead{\n" + "&".join(["\\colhead{" + h + "}" for h in header]) + "} \\\n\\startdata\n"
+            if texlines[i].startswith("\\midrule"):
+                texlines[i] = ""
+            if texlines[i].startswith("\\bottomrule"):
+                texlines[i] = "\\enddata\n\\hline\n\\tablecomments{temp}\n\\end{deluxetable}"
+            if texlines[i].startswith("\\end{tabular}"):
+                texlines[i] = ""
+        dataReached = False
+        print("COLORTABLE")
+        print(colortable)
+        di = 0
+        
+        for i in range(len(texlines)):
+            #if i == 0 or i == 1 or i == 2: continue
+            print(texlines[i])
+            if not dataReached:
+                if "\\startdata" in texlines[i]:
+                    dataReached = True
+                continue
+            else:
+                print("colouring line " + str(i))
+                print(texlines[i])
+                newLine = texlines[i].split(" & ")[0] + " & "
+                dj = 0
+                for j,val in enumerate(texlines[i].split(" & ")[1:]):
+                    try:
+                        print("c: " + str(colortable[di][dj]))
+                        newLine += "\\cellcolor[HTML]{" + str(mpl.colors.rgb2hex(colortable[di][dj])).upper().replace("#","") + "} " + val + " & "
+                    except IndexError:
+                        newLine += val + " & "
+                    dj += 1
+                print(newLine)
+                di += 1
+                #texlines[i] = newLine + "\\\\\n"
+
+
+        try:
+            os.remove(f'./figures/forpaper/zs_table_{mode}_{runTime}.tex')
+        except FileNotFoundError:
+            pass
+        with open(f'./figures/forpaper/zs_table_{mode}_{runTime}.tex', 'w') as f:
+            f.writelines(texlines)

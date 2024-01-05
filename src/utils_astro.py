@@ -279,6 +279,21 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
 
     return f"temp/{cat_out_name}.fits", keys_id
 
+def split_eazytable(eazytable_inpath, train_frac, random_seed=1, overwrite=False):
+    np.random.seed(random_seed)
+    tempdir = os.listdir('temp')
+    if 'train.fits' in tempdir and 'test.fits' in tempdir and not overwrite:
+        print("Found train.fits and test.fits in temp folder. Skipping split.")
+        return 'temp/train.fits', 'temp/test.fits'
+    tab = Table.read(eazytable_inpath)
+    trainmask = np.random.randint(0, len(tab), size=len(tab)) < len(tab) * train_frac
+    testmask = ~trainmask
+    tab_train = tab[trainmask]
+    tab_test = tab[testmask]
+    tab_train.write('temp/train.fits', format='fits', overwrite=True)
+    tab_test.write('temp/test.fits', format='fits', overwrite=True)
+    return 'temp/train.fits', 'temp/test.fits'
+
 from astropy.cosmology import Planck18
 def gen_params(cat_path,templ_path,out_path,cosmo=Planck18,maxZ=12, doCosmo=True, doUtils=True):
     params = {
@@ -309,7 +324,7 @@ def gen_params(cat_path,templ_path,out_path,cosmo=Planck18,maxZ=12, doCosmo=True
     return params
 
 def get_outpaths(eazy_out, cat_out_name, ftempl_strs, runtimeNum=-1):
-    runTimes = np.sort([int(f.split('_')[-1]) for f in os.listdir(eazy_out) if f != '.gitignore'])
+    runTimes = np.sort([int(f.split('_')[-1]) for f in os.listdir(eazy_out) if f != '.gitignore' and not f.endswith('.zip') and "_" in f])
     runTimes = np.unique(runTimes)
     runTime = int(runTimes[runtimeNum])
     print("Picking runTime:", runTime)

@@ -7,6 +7,9 @@ from matplotlib.colors import LinearSegmentedColormap
 
 def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None, logy=False,color_after_chi=False):
     global fontsize
+    if len(photZs['specs'].keys()) == 0:
+        print("No spectra found...")
+        return
     fontsize_local = fontsize/2
     ftempl_lbl = ftempl_labeldict[ftempl]
     spec_data = photZs['specs'][id_cat]
@@ -133,7 +136,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
 
     #plot spec data
     
-    axis.plot(spec_data['wave'], spec_data['flux'], c='k', lw=0.5, ls='-', alpha=0.6)
+    axis.plot(spec_data['wave'], spec_data['flux'], c='k', lw=0.5, ls='-', alpha=0.6, label="Current spectra")#!added this, validate
     axis.fill_between(spec_data['wave'], spec_data['flux']-spec_data['flux_err'], spec_data['flux']+spec_data['flux_err'], color='k', alpha=0.2, lw=0, zorder=25)
 
     #rebin model spectra to simular wavelength intervals
@@ -332,6 +335,9 @@ def plot_SED_mosaic(photZs,ftempl_labels,ftempl_strs,ftempl_labeldict,runTime=0,
         mode_output_df = [photZs['output_df'][ftempl] for ftempl in mode_ftempl_strs]    
         for i, df_out, ftempl in zip(range(len(mode_ftempl_strs)), mode_output_df, mode_ftempl_strs):
             #print(ftempl)
+            if len(photZs['specs'].keys()) == 0: 
+                print("No spectra found...")
+                continue
             if idx == None:#have sort by chi2
                 chi2s = df_out['z_phot_chi2']
                 chi2s = [chi2 if chi2 > 0 else 0 for chi2 in chi2s]
