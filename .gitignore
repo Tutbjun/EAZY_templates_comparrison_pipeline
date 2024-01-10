@@ -167,3 +167,5 @@ astrodata
 *.fits
 *.csv
 *.png
+*.pkl
+*.tex

@@ -10,7 +10,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     if len(photZs['specs'].keys()) == 0:
         print("No spectra found...")
         return
-    fontsize_local = fontsize/2
+    fontsize_local = fontsize/2*1.8
     ftempl_lbl = ftempl_labeldict[ftempl]
     spec_data = photZs['specs'][id_cat]
     index = np.where(photZs['input_df'][ftempl]['id'] == id_cat)[0][0]
@@ -129,8 +129,8 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     modelChi2red = np.sum((data_phot['model'][data_phot['valid']]-data_phot['fobs'][data_phot['valid']])**2/(data_phot['efobs'][data_phot['valid']]**2))/(sum(data_phot['valid'])-1)
     print("Chi2 diff:", chi2red-modelChi2red)
     axis.annotate(f'{ftempl_lbl}', xy=(anXs[4],anYs[4]), xycoords='axes fraction', fontsize=fontsize_local*1.25, ha='left', va='center', textcoords='offset points', xytext=(0,0))#TODO: move to left
-    axis.annotate(f'$\chi^2_{{red}}$≈{"{:.1e}".format(chi2red)}', xy=(anXs[0],anYs[0]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
-    axis.annotate(f'ID={id_cat}', xy=(anXs[1],anYs[1]), xycoords='axes fraction', fontsize=fontsize_local*0.8, ha='left', va='center', textcoords='offset points', xytext=(0,0))
+    axis.annotate(f'$\chi^2_{{red}}$≈{"{:.1f}".format(chi2red)}', xy=(anXs[0],anYs[0]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
+    axis.annotate(f'ID={id_cat}', xy=(anXs[1],anYs[1]), xycoords='axes fraction', fontsize=fontsize_local*0.9, ha='left', va='center', textcoords='offset points', xytext=(0,0))
     axis.annotate(f'$z_{{spec}}$≈{z_spec:.1f}', xy=(anXs[2],anYs[2]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
     axis.annotate(f'$\Delta z$≈{z_phot-z_spec:.1f}', xy=(anXs[3],anYs[3]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
 
@@ -195,7 +195,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     xMax = axis.get_xlim()[1]
     xMin = axis.get_xlim()[0]
     axis.set_xlim((xMin:=xMin), (xMax:=5))#!chaning xMin ruins the xticks
-    axis.set_ylim(-axis.get_ylim()[1]*0.1, axis.get_ylim()[1]*1)
+    axis.set_ylim(-axis.get_ylim()[1]*0.4, axis.get_ylim()[1]*1)#NOTE did a thing here;)
     topSort = np.argsort(x_fill_top)
     botSort = np.argsort(x_fill_bot)
     x_fill_top = x_fill_top[topSort]
