@@ -34,15 +34,18 @@ filts_HST = {
 ftempl_labeldict = {#! use ; to indicate modifications
     'blue_sfhz_13': "BLSFH",
     'carnall_sfhz_13': "CASFH",
-    'corr_sfhz_13': "COSFH",
+    #'corr_sfhz_13': "COSFH",
     'eazy_v1.3.spectra': "EAZ3",
-    'EMextreme': "EMEx",
-    'EMlines': "EMLi",
-    'EMLines;linearcomb': "EMLi;LC",
-    'fsps_45k': "F45k",
-    'fsps_60k': "F60k",
-    'fsps_45k;linearcomb': "F45k;LC",
-    'fsps_45k;0.3removed': "F45k;0.3r",
+    #'EMextreme': "EMEx",
+    'EMlines_Nathans': "EMLi",
+    #'EMLines;linearcomb': "EMLi;LC",
+    'fsps_45k_steinhardt': "F45k",
+    #'fsps_60k': "F60k",
+    #'fsps_45k;linearcomb': "F45k;LC",
+    #'fsps_45k;0.3removed': "F45k;0.3r",
+    'QSF_12_v3_newtemplates_Larson': "Lar22",
+    'Kirkpatrick': "Kir12",
+    'beta.spectra_Wilkins': "Wil22"
 }
 
 """catalogue_paths = {
@@ -186,7 +189,27 @@ def rename_cols2convention(tab):
         tab.rename_column(c, c.split('_')[0] + '_err')
     return tab
 
-def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogues=[], z_min_limit=0.0, filters=None):
+import time
+def errorresample_catalogue(tab, filter_systematics, seed=None):
+    #make systematics:
+    if seed is not None: np.random.seed(seed)
+    else: np.random.seed(int((time.time()%100*10000)))
+    stds = filter_systematics
+    avgs = np.ones(len(filter_systematics))
+    resamps = np.ones(len(filter_systematics))
+    for i in range(len(filter_systematics)):
+        if stds[i] == 0: continue
+        resamps[i] = np.random.normal(avgs[i], stds[i], 1)[0]
+    #apply systematics
+    cols_f = np.sort(hmod.get_matches('_flux', tab.columns))
+    cols_fe = np.sort(hmod.get_matches('_err', tab.columns))
+    for i in range(len(cols_f)):
+        tab[cols_f[i]] *= resamps[i]
+        tab[cols_fe[i]] *= resamps[i]
+    #done
+    return tab
+
+def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogues=[], z_min_limit=0.0, filters=None, filter_systematics=None, do_resample=False):
     mw_reddening = get_mv_reddening()
     hdu_names = get_hdu_names(catalogue_inpath)
     try: 
@@ -215,19 +238,6 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
             print("Warning: The following filters where not used from catalogue: ", np.array(cols_f)[~mask])
         cols_f = cols_f[mask]
         cols_fe = cols_fe[mask]
-    # CIRC1: 0.10 arcsec aperture (see README)
-    """exts = ['_CIRC1', 'tot_1']
-    for ext in exts:
-        success = False
-        try:
-            cols_dummy = hmod.get_matches(ext, tab_in.columns, exclude='_ei')
-            cols_f = np.sort(hmod.get_matches(ext, cols_dummy, exclude='_e'))
-            cols_fe = np.sort(hmod.get_matches('_e', cols_dummy))
-            if len(cols_f) == 0: raise ValueError
-            if len(cols_fe) == 0: raise ValueError
-            success = True
-        except ValueError: continue
-        if success: break"""
     cols_fluxes = list(np.vstack([cols_f, cols_fe]).T.flatten())
     cols = list(np.insert(cols_fluxes, 0, ['ID', 'RA', 'DEC', 'z_spec']))
 
@@ -254,7 +264,6 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
         tab_out[c] *= mw_reddening[key]
 
     # redshift limit
-
     for i in range(len(tab_out)):
         if tab_out['z_spec'][i] < z_min_limit:
             tab_out['z_spec'][i] = -1.0
@@ -266,18 +275,24 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
         elif 'err' in c:
             tab_out.rename_column(c, c.split('_')[0].upper() + '_err')
 
+    #do the errorsystematrics resampling
+    path_out = f"temp/{cat_out_name}.fits"
+    if do_resample:
+        if filter_systematics is None: raise ValueError("No filter_systematics given!")
+        tab_out = errorresample_catalogue(tab_out, filter_systematics)
+        path_out = f"temp/{cat_out_name}_resampled.fits"
 
     #=== apply MW reddening
     #atten_dict = ez.get_atten_dict(filts_eazyres, filts_str)
     #degr_image_sig *= atten_dict[filt] / 100. # uJy
 
     # save EAZY table
-    tab_out.write(f'temp/{cat_out_name}.fits', format='fits', overwrite=True)
+    tab_out.write(path_out, format='fits', overwrite=True)
 
     #make a keys_id
     keys_id = ['ID id', 'RA ra', 'DEC dec', 'z_spec z_spec']
 
-    return f"temp/{cat_out_name}.fits", keys_id
+    return path_out, keys_id
 
 def split_eazytable(eazytable_inpath, train_frac, random_seed=1, overwrite=False):
     np.random.seed(random_seed)
@@ -331,6 +346,34 @@ def get_outpaths(eazy_out, cat_out_name, ftempl_strs, runtimeNum=-1):
     outpaths_f = '{eazy_outfolder}/{ftempl}_{runTime}/' + cat_out_name + '.zout.fits'
     out_paths = [os.path.dirname(outpaths_f.format(ftempl=f, runTime=runTime, eazy_outfolder=eazy_out)) for f in ftempl_strs]
     return out_paths
+
+def get_resampled_outpaths(eazy_out, cat_out_name, ftempl_strs, runtimeNum=None):
+    out_paths = {}
+    resample_folders = os.listdir(os.path.join(eazy_out, 'resamples'))
+    resample_folders = np.sort([f for f in resample_folders if len(os.listdir(os.path.join(eazy_out, 'resamples', f))) > 0])
+    for ftemplstr in ftempl_strs:
+        out_paths[ftemplstr] = []
+        for resample_folder in resample_folders:
+            templates_infolder = os.listdir(os.path.join(eazy_out, 'resamples', resample_folder))
+            if templates_infolder[0] == 'eazy-output':
+                resample_folder = os.path.join(resample_folder, 'eazy-output')
+                templates_infolder = os.listdir(os.path.join(eazy_out, 'resamples', resample_folder))
+            templates_infolder_names = ["_".join(f.split('_')[:-1]) for f in templates_infolder]
+            """if len(templates_infolder_names) == 1 and templates_infolder_names[0] == '':
+                templates_infolder_names = []"""
+            runTimes = [int(f.split('_')[-1]) for f in templates_infolder]
+            assert len(np.unique(runTimes)) == 1
+            runTime = np.unique(runTimes)[0]
+            if ftemplstr in templates_infolder_names:
+                out_paths[ftemplstr].append(os.path.join(eazy_out, 'resamples', resample_folder, ftemplstr + "_" + str(runTime)))
+    for key in out_paths:
+        cnt = len(out_paths[key])
+        if cnt == 0: cnt = str(cnt) + "(!!!)"
+        elif cnt < 10: cnt = str(cnt) + "(!)"
+        else: cnt = str(cnt)
+        print(f"Found {cnt} resampled catalogues for {key}")
+    return out_paths
+        
 
 import pandas as pd
 from astropy.io import fits

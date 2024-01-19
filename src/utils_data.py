@@ -54,7 +54,7 @@ def load_photoz_input(cat_out_name, template_path, out_path, out_name, params, f
 
 from tqdm import tqdm
 
-def get_output_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+def get_output_df(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     df_dict = {}
     for tpath, opath, oname in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading output table...", total=len(templ_paths)):
@@ -66,7 +66,7 @@ def get_output_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, t
     print()
     return df_dict
 
-def get_output_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+def get_output_pz(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     pz_dict = {}
     for tpath, opath, oname in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading PHOTZ output and gridding templatespace...", total=len(templ_paths)):
@@ -84,7 +84,7 @@ def get_output_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, t
     print()
     return pz_dict
 
-def get_input_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+def get_input_df(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     df_dict = {}
     for tpath, opath, oname in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading input table...", total=len(templ_paths)):
@@ -96,7 +96,7 @@ def get_input_df(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, tr
     print()
     return df_dict
 
-def get_input_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+def get_input_pz(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     pz_dict = {}
     for tpath, opath, oname, in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading PHOTZ input and gridding templatespace...", total=len(templ_paths)):
@@ -111,7 +111,7 @@ def get_input_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, tr
     print()
     return pz_dict
 
-def get_train_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+def get_train_pz(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
     
     #pz_dict = {}
     #for tpath, opath, oname, in tqdm(zip(templ_paths, out_paths, ftempl_strs),desc="Loading PHOTZ input and gridding templatespace...", total=len(templ_paths)):
@@ -132,8 +132,8 @@ def get_train_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, tr
     print()
     return pz
 
-def get_test_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
-    return get_train_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, test_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate)
+def get_test_pz(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+    return get_train_pz(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, test_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate)
     opath = "temp/eazy-output-optimizer"
     oname = "eazy"
     params = utils_astro.gen_params(
@@ -150,3 +150,21 @@ def get_test_pz(templ_paths, out_paths, ftempl_strs, cat_out_name, cat_path, tra
     print()
     return pz
 
+import os
+def get_output_df_resampled(templ_paths, out_paths, out_paths_resampled, ftempl_strs, cat_out_name, cat_path, train_path, test_path, filts, zps, keys_id, paramDict, matrixtemplate):
+    cat_out_name = cat_out_name + "_resampled"
+    df_dict = {}
+    opaths_list = [paths for paths in out_paths_resampled.values()]
+    for tpath, opaths, oname in tqdm(zip(templ_paths, opaths_list, ftempl_strs),desc="Loading output resampled tables...", total=len(templ_paths)):
+        df_dict[oname] = []
+        for opath in opaths:
+            fits = [f for f in os.listdir(opath) if f.endswith('.fits')]
+            if len(fits) == 0:
+                continue
+            df = load_dataframe_output(
+                cat_out_name,
+                template_path=tpath, out_path=opath, out_name=oname
+                )
+            df_dict[oname].append(df)
+    print()
+    return df_dict

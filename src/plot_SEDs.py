@@ -46,9 +46,11 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
         #print color
         #print(obj.get_color())
         if k == 1: 
+            obj.set_marker('s')#! additon, check
             obj.set_markersize(3.5)#photometry
             obj.set_alpha(0.8)
             if color_after_chi: obj.set_alpha(0)
+            
             #remove lines arround point
             obj.set_markeredgewidth(0)
         if k == 2: 

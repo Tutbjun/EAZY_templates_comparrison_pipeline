@@ -22,7 +22,68 @@ zCharacteristic = zCharacteristic
 
 
 
-
+def rnd_p(x):#, dmod=None):
+    #print(x)
+    def rnd(x:float, significantDigit=None):
+        #print("ROunDING")
+        if significantDigit is None:
+            significantDigit = np.floor(np.log10(np.abs(x))) - 1
+        rounded = round(x, -int(significantDigit))#, int(significantDigit)
+        #if rounded == int(rounded): return int(rounded)
+        #to string
+        rounded = str(rounded)
+        if significantDigit < 0:
+            #print(rounded.split("."))
+            #print(rounded)
+            #print([rounded.split(".")[1][:-int(significantDigit)]])
+            rounded = ".".join([rounded.split(".")[0]] + [rounded.split(".")[1][:-int(significantDigit)]])
+            #print(rounded)
+            #print([rounded.split(".")])
+            #print(rounded)
+            leadingDigits = rounded.split(".")[1]
+            while leadingDigits.startswith("0") and not leadingDigits.endswith("0"): leadingDigits = leadingDigits[1:]
+            while len(leadingDigits) < -significantDigit and str(leadingDigits)!='':
+    
+                #print("loop " + leadingDigits)
+                rounded += "0"
+                leadingDigits = rounded.split(".")[1]
+                while leadingDigits.startswith("0") and not len(np.unique(leadingDigits))==1: leadingDigits = leadingDigits[1:]
+            #print(rounded)
+        return rounded
+    #if its a sci_val, use the error for rounding
+    if type(x) == sci_val:
+        try:
+            float(x.pm)
+            assert not np.isnan(x.pm)
+            assert not np.isinf(x.pm)
+            assert not np.isnan(x.x)
+            assert not np.isinf(x.x)
+            err = x.pm
+            X = x.x
+            n = np.floor(np.log10(np.abs(err)))
+            #print(err, n)
+            rounded = float(rnd(X, n))
+            err_rounded = float(rnd(err, n))
+            return sci_val(rounded, err_rounded)
+        except:
+            if np.isnan(x.x) or np.isinf(x.x):
+                return x
+            return rnd(x.x)
+    try:
+        float(x)
+        int(x)
+    except:
+        try:
+            float(x[0])
+            int(x[0])
+            r = [rnd(i) for i in x]
+            return r#, s
+        except:
+            return x#, None
+    #if dmod is not None:
+    #    #n = np.floor(np.log10(np.abs(err)))
+    #    return rnd(x, -n)
+    return rnd(x)
 
 
 #TODO: needs tiling color by accumulative flux
@@ -37,19 +98,46 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.ticker import MultipleLocator
 
-def plot(df_out,ftempl_strs,ftempl_labels,runTime):
-    global etasStartIndex
-    global etas
-    etasStartIndex = 0
-    etas = []
-    #precalc stats
+def clean_phots(z_spec, z_phot, zmin=5):
+    mask = (z_spec > zmin) & (~np.isnan(z_spec))
+    return z_spec[mask], z_phot[mask], mask
+
+def get_deltaZ(z_spec, z_phot):
+    return (z_phot - z_spec)/(1 + z_spec)
+
+def get_outliers(z_spec, z_phot):
+    deltaZs = get_deltaZ(z_spec, z_phot)
+    return (deltaZs > 0.15) | (deltaZs < -0.15)
+
+def get_bias(z_spec, z_phot):
+    return np.mean(get_deltaZ(z_spec, z_phot))
+
+def get_scatter(z_spec, z_phot):
+    return np.std(get_deltaZ(z_spec, z_phot))
+
+def get_eta(z_spec, z_phot):
+    return np.sum(get_outliers(z_spec, z_phot))/len(z_spec)
+
+def get_stats(z_spec, z_phot):
+    stats = {}
+    stats['deltaZ'] = get_deltaZ(z_spec, z_phot)
+    stats['outliers'] = get_outliers(z_spec, z_phot)
+    stats['bias'] = get_bias(z_spec, z_phot)
+    stats['scatter'] = get_scatter(z_spec, z_phot)
+    stats['eta'] = get_eta(z_spec, z_phot)
+    return stats
+
+def get_stats_organized(df_out, ftempl_strs, ftempl_labels, zmin=5):
     deltaZ_s = {'default':[], 'modified':[]}
     deltaZ_all_s = {'default':[], 'modified':[]}
     outliers_s = {'default':[], 'modified':[]}
     outliers_all_s = {'default':[], 'modified':[]}
     bias_s = {'default':[], 'modified':[]}
+    bias_all_s = {'default':[], 'modified':[]}
     scatter_s = {'default':[], 'modified':[]}
+    scatter_all_s = {'default':[], 'modified':[]}
     etas_s = {'default':[], 'modified':[]}
+    etas_all_s = {'default':[], 'modified':[]}
     for mode in ['default', 'modified']:
         mode_ftempl_lbls = copy(ftempl_labels)
         mode_ftempl_strs = copy(ftempl_strs)
@@ -63,28 +151,401 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
         for i, ftempl in enumerate(mode_ftempl_strs):
             if ftempl not in df_out.keys():
                 continue
-            redshiftTbl = df_out[ftempl]
+            #redshiftTbl = df_out[ftempl]
+            redshiftTbl = {
+                'z_spec': np.array(df_out[ftempl]['z_spec']),
+                'z_phot': np.array(df_out[ftempl]['z_phot'])
+            }
             redChar = {
                 'z_spec': np.array(redshiftTbl['z_spec']),
                 'z_phot': np.array(redshiftTbl['z_phot']),
             }
-            mask = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
-            redChar['z_spec'] = redChar['z_spec'][mask]
-            redChar['z_phot'] = redChar['z_phot'][mask]
-            deltaZ = (redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec'])
-            deltaZ_s[mode].append(deltaZ)
-            deltaZ_all = (redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec'])
-            deltaZ_all_s[mode].append(deltaZ_all)
-            outliers = (deltaZ > 0.15) | (deltaZ < -0.15)
-            outliers_s[mode].append(outliers)
-            outliers_all = (deltaZ_all > 0.15) | (deltaZ_all < -0.15)
-            outliers_all_s[mode].append(outliers_all)
-            bias = np.mean(deltaZ)
-            bias_s[mode].append(bias)
-            scatter = np.std(deltaZ)
-            scatter_s[mode].append(scatter)
-            eta = np.sum(outliers)/len(outliers)
-            etas_s[mode].append(eta)
+            
+            redChar['z_spec'], redChar['z_phot'], _ = clean_phots(redChar['z_spec'], redChar['z_phot'], zmin=zmin)
+            redshiftTbl['z_spec'], redshiftTbl['z_phot'], _ = clean_phots(redshiftTbl['z_spec'], redshiftTbl['z_phot'], zmin=0)
+
+            stats_char = get_stats(redChar['z_spec'], redChar['z_phot'])
+            stats_all = get_stats(redshiftTbl['z_spec'], redshiftTbl['z_phot'])
+            deltaZ_s[mode].append(np.array([sci_val(stats_char['deltaZ'][i], np.nan) for i in range(len(stats_char['deltaZ']))]))
+            deltaZ_all_s[mode].append(np.array([sci_val(stats_all['deltaZ'][i], np.nan) for i in range(len(stats_all['deltaZ']))]))
+            outliers_s[mode].append(stats_char['outliers'])
+            outliers_all_s[mode].append(stats_all['outliers'])
+            bias_s[mode].append(sci_val(stats_char['bias'], np.nan))
+            bias_all_s[mode].append(sci_val(stats_all['bias'], np.nan))
+            scatter_s[mode].append(sci_val(stats_char['scatter'], np.nan))
+            scatter_all_s[mode].append(sci_val(stats_all['scatter'], np.nan))
+            etas_s[mode].append(sci_val(stats_char['eta'], np.nan))
+            etas_all_s[mode].append(sci_val(stats_all['eta'], np.nan))
+    return deltaZ_s, deltaZ_all_s, outliers_s, outliers_all_s, bias_s, bias_all_s, scatter_s, scatter_all_s, etas_s, etas_all_s
+
+from numba import jit
+
+#@jit(nopython=True)
+def bootstrap_SEM(data, N=10000):
+    nan_mask = np.isnan(data)
+    data = data[~nan_mask]
+    pN = len(data)
+    x_avg_bs = np.empty(N)
+    random_indices_all = np.random.randint(pN, size = (N,pN))# np.random.randint(N, size = N) creates N random numbers from 0 to N-1, i.e. N random indices
+    data_resamplings = np.empty((N,pN))
+    """for i in range(N):
+        data_resamplings[i] = data[random_indices_all[i]]
+        #x_avg_bs[i] = resampled_data.mean()"""
+    data_resamplings = data[random_indices_all]
+    x_avg_bs = np.mean(data_resamplings, axis=1)
+    median = np.median(x_avg_bs)
+    sigma1 = np.quantile(x_avg_bs, 0.15865)
+    sigma2 = np.quantile(x_avg_bs, 0.84135)
+    #print(rf"median: ${median}^{{+{sigma2-median}}}_{{-{median-sigma1}}}$")
+    #plotHistogramsOfRepeats(x_avg_bs, 'Distribution of the means')
+    return median, median-sigma1, sigma2-median
+
+def get_stats_organized_resamples(df_out, ftempl_strs, ftempl_labels, zmin=5):
+    deltaZ_s = {'default':[], 'modified':[]}
+    deltaZ_all_s = {'default':[], 'modified':[]}
+    outliers_s = {'default':[], 'modified':[]}
+    outliers_all_s = {'default':[], 'modified':[]}
+    bias_s = {'default':[], 'modified':[]}
+    bias_all_s = {'default':[], 'modified':[]}
+    scatter_s = {'default':[], 'modified':[]}
+    scatter_all_s = {'default':[], 'modified':[]}
+    etas_s = {'default':[], 'modified':[]}
+    etas_all_s = {'default':[], 'modified':[]}
+    for mode in ['default', 'modified']:
+        deltaZ_char_part = {}
+        deltaZ_all_part = {}
+        outliers_char_part = {}
+        outliers_all_part = {}
+        bias_char_part = {}
+        bias_all_part = {}
+        scatter_char_part = {}
+        scatter_all_part = {}
+        etas_char_part = {}
+        etas_all_part = {}
+        mode_ftempl_lbls = copy(ftempl_labels)
+        mode_ftempl_strs = copy(ftempl_strs)
+        if mode == 'modified': 
+            mode_ftempl_lbls = [s for s in mode_ftempl_lbls if ";" in s]
+            mode_ftempl_strs = [s for s in mode_ftempl_strs if ";" in s]
+        if mode == 'default': 
+            mode_ftempl_lbls = [s for s in mode_ftempl_lbls if ";" not in s]
+            mode_ftempl_strs = [s for s in mode_ftempl_strs if ";" not in s]
+        if len(mode_ftempl_lbls) == 0: continue
+        for ftempl in mode_ftempl_strs:
+            deltaZ_char_part[ftempl] = []
+            deltaZ_all_part[ftempl] = []
+            outliers_char_part[ftempl] = []
+            outliers_all_part[ftempl] = []
+            bias_char_part[ftempl] = []
+            bias_all_part[ftempl] = []
+            scatter_char_part[ftempl] = []
+            scatter_all_part[ftempl] = []
+            etas_char_part[ftempl] = []
+            etas_all_part[ftempl] = []
+        for i in range(max([len(df_out[key]) for key in df_out.keys()])):
+            df_out_part = {}
+            for key in df_out.keys():
+                if len(df_out[key]) > i:
+                    df_out_part[key] = df_out[key][i]
+                else:
+                    df_out_part[key] = None
+            
+            mask_all = None
+            mask_char = None
+            def stats_mask_calc(mask_all=None, mask_char=None):
+                masks_all = []
+                masks_char = []
+                stats = {'char':[], 'all':[]}
+                for j, ftempl in enumerate(mode_ftempl_strs):
+                    if df_out_part[ftempl] is None:
+                        continue
+                    redshiftTbl = {
+                        'z_spec': np.array(df_out_part[ftempl]['z_spec']),
+                        'z_phot': np.array(df_out_part[ftempl]['z_phot'])
+                    }#!apply fix here
+                    if mask_all is None:
+                        redshiftTbl['z_spec'], redshiftTbl['z_phot'], mask = clean_phots(redshiftTbl['z_spec'], redshiftTbl['z_phot'], zmin=0)
+                        masks_all.append(mask)
+                    else:
+                        redshiftTbl['z_spec'], redshiftTbl['z_phot'] = redshiftTbl['z_spec'][mask_all], redshiftTbl['z_phot'][mask_all]
+                    redChar = {
+                        'z_spec': np.array(redshiftTbl['z_spec']),
+                        'z_phot': np.array(redshiftTbl['z_phot']),
+                    }
+                    if mask_char is None:
+                        redChar['z_spec'], redChar['z_phot'], mask = clean_phots(redChar['z_spec'], redChar['z_phot'], zmin=zmin)
+                        masks_char.append(mask)
+                    else:
+                        redChar['z_spec'], redChar['z_phot'] = redChar['z_spec'][mask_char], redChar['z_phot'][mask_char]
+                    stats_char = get_stats(redChar['z_spec'], redChar['z_phot'])
+                    stats_all = get_stats(redshiftTbl['z_spec'], redshiftTbl['z_phot'])
+                    stats['char'].append(stats_char)
+                    stats['all'].append(stats_all)
+                return stats, masks_all, masks_char
+            _, masks_all, masks_char = stats_mask_calc(mask_all, mask_char)
+            #and-opperate masks
+            mask_all = np.all(masks_all, axis=0)
+            mask_char = np.all(masks_char, axis=0)
+            stats, _, _ = stats_mask_calc(mask_all, mask_char)
+            for i in range(len(stats['char'])):
+                stats_char = stats['char'][i]
+                stats_all = stats['all'][i]
+                ftempl = mode_ftempl_strs[i]
+                deltaZ_char_part[ftempl].append(stats_char['deltaZ'])
+                deltaZ_all_part[ftempl].append(stats_all['deltaZ'])
+                outliers_char_part[ftempl].append(stats_char['outliers'])
+                outliers_all_part[ftempl].append(stats_all['outliers'])
+                bias_char_part[ftempl].append(stats_char['bias'])
+                bias_all_part[ftempl].append(stats_all['bias'])
+                scatter_char_part[ftempl].append(stats_char['scatter'])
+                scatter_all_part[ftempl].append(stats_all['scatter'])
+                etas_char_part[ftempl].append(stats_char['eta'])
+                etas_all_part[ftempl].append(stats_all['eta'])
+        for ftempl in mode_ftempl_strs:
+            deltaZ_char_part[ftempl] = np.array(deltaZ_char_part[ftempl])
+            deltaZ_all_part[ftempl] = np.array(deltaZ_all_part[ftempl])
+            outliers_char_part[ftempl] = np.array(outliers_char_part[ftempl])
+            outliers_all_part[ftempl] = np.array(outliers_all_part[ftempl])
+            bias_char_part[ftempl] = np.array(bias_char_part[ftempl])
+            bias_all_part[ftempl] = np.array(bias_all_part[ftempl])
+            scatter_char_part[ftempl] = np.array(scatter_char_part[ftempl])
+            scatter_all_part[ftempl] = np.array(scatter_all_part[ftempl])
+            etas_char_part[ftempl] = np.array(etas_char_part[ftempl])
+            etas_all_part[ftempl] = np.array(etas_all_part[ftempl])
+        deltaZ_char_val = {}
+        deltaZ_all_val = {}
+        outliers_char_val = {}
+        outliers_all_val = {}
+        bias_char_val = {}
+        bias_all_val = {}
+        scatter_char_val = {}
+        scatter_all_val = {}
+        etas_char_val = {}
+        etas_all_val = {}
+        for ftempl in mode_ftempl_strs:
+            deltaZ_temp = deltaZ_char_part[ftempl].T
+            deltaZ_char_val[ftempl] = np.array([sci_val(np.mean(deltaZ_temp[i]), np.std(deltaZ_temp[i])) for i in range(len(deltaZ_temp))])
+            deltaZ_temp = deltaZ_all_part[ftempl].T
+            deltaZ_all_val[ftempl] = np.array([sci_val(np.mean(deltaZ_temp[i]), np.std(deltaZ_temp[i])) for i in range(len(deltaZ_temp))])
+            #outliers_temp = outliers_char_part[ftempl].T#!how does one calculate an error on a mask??
+            if len(outliers_char_part[ftempl]) > 0: outliers_char_val[ftempl] = outliers_char_part[ftempl][0]
+            else: outliers_char_val[ftempl] = np.array([])
+            #sci_val(np.mean(outliers_temp), np.std(outliers_temp))
+            #outliers_temp = outliers_all_part[ftempl].T
+            #outliers_all_val[ftempl] = sci_val(np.mean(outliers_temp), np.std(outliers_temp))
+            if len(outliers_all_part[ftempl]) > 0: outliers_all_val[ftempl] = outliers_all_part[ftempl][0]
+            else: outliers_all_val[ftempl] = np.array([])
+            AM, sigma1, sigma2 = bootstrap_SEM(bias_char_part[ftempl])
+            bias_char_val[ftempl] = sci_val(AM, sigma1=sigma1, sigma2=sigma2)
+            AM, sigma1, sigma2 = bootstrap_SEM(bias_all_part[ftempl])
+            bias_all_val[ftempl] = sci_val(AM, sigma1=sigma1, sigma2=sigma2)
+            AM, sigma1, sigma2 = bootstrap_SEM(scatter_char_part[ftempl])
+            scatter_char_val[ftempl] = sci_val(AM, sigma1=sigma1, sigma2=sigma2)
+            AM, sigma1, sigma2 = bootstrap_SEM(scatter_all_part[ftempl])
+            scatter_all_val[ftempl] = sci_val(AM, sigma1=sigma1, sigma2=sigma2)
+            AM, sigma1, sigma2 = bootstrap_SEM(etas_char_part[ftempl])
+            etas_char_val[ftempl] = sci_val(AM, sigma1=sigma1, sigma2=sigma2)
+            AM, sigma1, sigma2 = bootstrap_SEM(etas_all_part[ftempl])
+            etas_all_val[ftempl] = sci_val(AM, sigma1=sigma1, sigma2=sigma2)
+        for ftempl in mode_ftempl_strs:
+            deltaZ_s[mode].append(deltaZ_char_val[ftempl])
+            deltaZ_all_s[mode].append(deltaZ_all_val[ftempl])
+            outliers_s[mode].append(outliers_char_val[ftempl])
+            outliers_all_s[mode].append(outliers_all_val[ftempl])
+            bias_s[mode].append(bias_char_val[ftempl])
+            bias_all_s[mode].append(bias_all_val[ftempl])
+            scatter_s[mode].append(scatter_char_val[ftempl])
+            scatter_all_s[mode].append(scatter_all_val[ftempl])
+            etas_s[mode].append(etas_char_val[ftempl])
+            etas_all_s[mode].append(etas_all_val[ftempl])
+    return deltaZ_s, deltaZ_all_s, outliers_s, outliers_all_s, bias_s, bias_all_s, scatter_s, scatter_all_s, etas_s, etas_all_s
+
+    #return get_stats_organized(df_out, ftempl_strs, ftempl_labels, zmin=zmin)#TODO: implement
+
+class sci_val():
+    def __format__(self, fmt):
+        if fmt == '':
+            return str(self)
+        else:
+            return float(self).__format__(fmt)
+    def __repr__(self):
+        return str(self.r) + "±" + str(self.pmr)
+    def __init__(self, x, pm=None, sigma1=None, sigma2=None, npm=1):
+        assert npm >= 1
+        self.x = x
+        self.pm = pm
+        self.r = None
+        if pm is not None:
+            self.__round_pm__(pm,x,npm)
+        elif sigma1 is not None and sigma2 is not None:
+            self.__round_Q__(x,sigma1,sigma2,npm)
+        else:
+            self.r = x
+            self.pmr = pm
+            self.n = npm
+    def __float__(self):
+        return self.x
+    def __round_pm__(self,pm,x, npm):
+        self.sigma1 = None
+        self.sigma2 = None
+        try:
+            #pm = self.ṕm
+            float(pm)
+            assert not np.isnan(pm)
+            n = np.floor(np.log10(np.abs(pm)))-npm+1
+            self.n = -n
+            self.r = round(x, -int(n))
+            self.pmr = round(pm, -int(n))
+        except:
+            self.r = x
+            self.pmr = pm
+            self.n = npm
+    def __round_Q__(self,x,sigma1,sigma2, npm):
+        self.pm = None
+        self.pmr = None
+        try:
+            float(sigma1)
+            float(sigma2)
+            assert not np.isnan(sigma1)
+            assert not np.isnan(sigma2)
+            n = np.floor(np.log10(np.abs(min(sigma1,sigma2))))-npm+1
+            self.n = -n
+            self.r = round(x, -int(n))
+            self.sigma1 = round(sigma1, -int(n))
+            self.sigma2 = round(sigma2, -int(n))
+        except:
+            self.r = x
+            self.sigma1 = sigma1
+            self.sigma2 = sigma2
+            self.n = npm
+            
+    def __str__(self):
+        if self.pm is not None:
+            r_str = str(self.r)
+            if len(r_str.split(".")[-1]) > self.n:
+                r_str = float(r_str)
+                if not np.isnan(r_str) and not np.isinf(r_str):
+                    if self.n <= 0: r_str = int(r_str)
+                    else: r_str = round(r_str, int(self.n))
+                r_str = str(r_str)
+                while len(r_str.split(".")[-1]) < self.n:
+                    r_str += "0"
+            pmr_str = str(self.pmr)
+            if len(pmr_str.split(".")[-1]) > self.n:
+                pmr_str = float(pmr_str)
+                if not np.isnan(pmr_str) and not np.isinf(pmr_str):
+                    if self.n <= 0: pmr_str = int(pmr_str)
+                    else: pmr_str = round(pmr_str, int(self.n))
+                pmr_str = str(pmr_str)
+                while len(pmr_str.split(".")[-1]) < self.n:
+                    pmr_str += "0"
+            return r_str + "±" + pmr_str
+        elif self.sigma1 is not None and self.sigma2 is not None:
+            r_str = str(self.r)
+            if len(r_str.split(".")[-1]) > self.n:
+                r_str = float(r_str)
+                if not np.isnan(r_str) and not np.isinf(r_str):
+                    if self.n <= 0: r_str = int(r_str)
+                    else: r_str = round(r_str, int(self.n))
+                r_str = str(r_str)
+                while len(r_str.split(".")[-1]) < self.n:
+                    r_str += "0"
+            sigma1_str = str(self.sigma1)
+            if len(sigma1_str.split(".")[-1]) > self.n:
+                sigma1_str = float(sigma1_str)
+                if not np.isnan(sigma1_str) and not np.isinf(sigma1_str):
+                    if self.n <= 0: sigma1_str = int(sigma1_str)
+                    else: sigma1_str = round(sigma1_str, int(self.n))
+                sigma1_str = str(sigma1_str)
+                while len(sigma1_str.split(".")[-1]) < self.n:
+                    sigma1_str += "0"
+            sigma2_str = str(self.sigma2)
+            if len(sigma2_str.split(".")[-1]) > self.n:
+                sigma2_str = float(sigma2_str)
+                if not np.isnan(sigma2_str) and not np.isinf(sigma2_str):
+                    if self.n <= 0: sigma2_str = int(sigma2_str)
+                    else: sigma2_str = round(sigma2_str, int(self.n))
+                sigma2_str = str(sigma2_str)
+                while len(sigma2_str.split(".")[-1]) < self.n:
+                    sigma2_str += "0"
+            return r_str + "^{+" + sigma2_str + "}_{-" + sigma1_str + "}"
+    def procent(self):
+        if self.pm is not None:
+            x = self.x*100
+            r = self.r*100
+            pm = self.pm*100
+            pmr = self.pmr*100
+            n = self.n -2
+            tempself = sci_val(x, pm)
+            tempself.n = n
+            return "["  + str(tempself) + "]%"
+        elif self.sigma1 is not None and self.sigma2 is not None:
+            x = self.x*100
+            r = self.r*100
+            sigma1 = self.sigma1*100
+            sigma2 = self.sigma2*100
+            n = self.n -2
+            tempself = sci_val(x, sigma1=sigma1, sigma2=sigma2)
+            tempself.n = n
+            return "["  + str(tempself) + "]%"
+
+from tqdm import tqdm
+
+def get_resampleAverages(df_out_resamplings):
+    new_df_out = {}
+    for key in df_out_resamplings.keys():
+        #avegare z_phot and z_spec
+        z_phots = []
+        z_specs = []
+        new_df_out[key] = {}
+        for i in range(len(df_out_resamplings[key])):
+            z_phots.append(df_out_resamplings[key][i]['z_phot'])
+            z_specs.append(df_out_resamplings[key][i]['z_spec'])
+        z_phots = np.array(z_phots)
+        z_specs = np.array(z_specs)
+        #replace all negative values with nan
+        negative_mask = (z_phots < 0) | (z_specs < 0)
+        z_phots[negative_mask] = np.nan
+        z_specs[negative_mask] = np.nan
+        z_specs = z_specs.T
+        z_phots = z_phots.T
+        #use bootstrap to get the mean and error
+        z_phot_means = []
+        z_spec_means = []
+        for i in tqdm(range(len(z_phots)), desc="Calculating bootstrap averages for " + key, total=len(z_phots)):
+            val, _, _ = bootstrap_SEM(z_phots[i])
+            z_phot_means.append(val)
+            val, _, _ = bootstrap_SEM(z_specs[i])
+            z_spec_means.append(val)
+        z_phot_means = np.array(z_phot_means).T
+        z_spec_means = np.array(z_spec_means).T
+        new_df_out[key]['z_phot'] = z_phot_means
+        new_df_out[key]['z_spec'] = z_spec_means
+    return new_df_out
+
+def plot(df_out,df_out_resamplings,ftempl_strs,ftempl_labels,runTime):
+    global etasStartIndex
+    global etas
+    etasStartIndex = 0
+    etas = []
+    #precalc stats
+    deltaZ_s, deltaZ_all_s, outliers_s, outliers_all_s, bias_s, _, scatter_s, _, etas_s, _ = get_stats_organized(df_out,ftempl_strs,ftempl_labels, zmin=zCharacteristic)
+    deltaZ_s_res, deltaZ_all_s_res, outliers_s_res, outliers_all_s_res, bias_s_res, _, scatter_s_res, _, etas_s_res, _ = get_stats_organized_resamples(df_out_resamplings,ftempl_strs,ftempl_labels, zmin=zCharacteristic)
+    have_full_resample = True
+    for key in df_out_resamplings.keys():
+        if len(df_out_resamplings[key]) == 0:
+            have_full_resample = False
+            break
+    for mode in ['default', 'modified']:
+        for i in range(len(deltaZ_all_s_res[mode])):
+            if len(deltaZ_all_s_res[mode][i]) > 0:
+                deltaZ_s[mode][i] = deltaZ_s_res[mode][i]
+                deltaZ_all_s[mode][i] = deltaZ_all_s_res[mode][i]
+                outliers_s[mode][i] = outliers_s_res[mode][i]
+                outliers_all_s[mode][i] = outliers_all_s_res[mode][i]
+                bias_s[mode][i] = bias_s_res[mode][i]
+                scatter_s[mode][i] = scatter_s_res[mode][i]
+                etas_s[mode][i] = etas_s_res[mode][i]
 
     for mode in ['default', 'modified']:
         mode_ftempl_lbls = copy(ftempl_labels)
@@ -113,45 +574,12 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
         else:
             axsMos = [axsMos]
         plt.subplots_adjust(wspace=0, hspace=0)
-        
-        """#precalc stats
-        deltaZ_s = []
-        deltaZ_all_s = []
-        outliers_s = []
-        outliers_all_s = []
-        bias_s = []
-        scatter_s = []
-        etas_s = []
-        for i, ftempl in enumerate(mode_ftempl_strs):
-            if ftempl not in photZs['output_df'].keys():
-                continue
-            redshiftTbl = photZs['output_df'][ftempl]
-            redChar = {
-                'z_spec': np.array(redshiftTbl['z_spec']),
-                'z_phot': np.array(redshiftTbl['z_phot']),
-            }
-            mask = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
-            redChar['z_spec'] = redChar['z_spec'][mask]
-            redChar['z_phot'] = redChar['z_phot'][mask]
-            deltaZ_s.append((redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec']))
-            deltaZ = deltaZ_s[-1]
-            deltaZ_all_s.append((redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec']))
-            deltaZ_all = deltaZ_all_s[-1]
-            outliers_s.append((deltaZ > 0.15) | (deltaZ < -0.15))
-            outliers = outliers_s[-1]
-            outliers_all_s.append((deltaZ_all > 0.15) | (deltaZ_all < -0.15))
-            outliers_all = outliers_all_s[-1]
-            bias_s.append(np.mean(deltaZ))
-            bias = bias_s[-1]
-            scatter_s.append(np.std(deltaZ))
-            scatter = scatter_s[-1]
-            etas_s.append(np.sum(outliers_s[i])/len(outliers_s[i]))
-            eta = etas_s[-1]"""
 
         #color the backgrounds of the plots with colormap RdYlGn by eta
         temp = [etas_s[k] for k in etas_s.keys()]
         etas = []
         for i in range(len(temp)): etas += temp[i]
+        etas = [e.x for e in etas]
         
         minEr, maxEr = np.min(etas)**(-ro), np.max(etas)**(-ro)
         norm = mpl.colors.Normalize(vmin=maxEr, vmax=minEr)
@@ -164,24 +592,24 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
             axsMos[j].set_facecolor(color)
         etasStartIndex = len(axsMos)
 
+        if have_full_resample:
+            df_out_2use = get_resampleAverages(df_out_resamplings)
+        else:
+            df_out_2use = df_out
         for i, ftempl in enumerate(mode_ftempl_strs):
             if ftempl not in df_out.keys():
                 continue
-            redshiftTbl = df_out[ftempl]
+            
+            redshiftTbl = df_out_2use[ftempl]
             redChar = {
                 'z_spec': np.array(redshiftTbl['z_spec']),
                 'z_phot': np.array(redshiftTbl['z_phot']),
             }
-            mask = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
-            redChar['z_spec'] = redChar['z_spec'][mask]
-            redChar['z_phot'] = redChar['z_phot'][mask]
+            #mask = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
+            #redChar['z_spec'] = redChar['z_spec'][mask]
+            #redChar['z_phot'] = redChar['z_phot'][mask]
+            redChar['z_spec'], redChar['z_phot'], _ = clean_phots(redChar['z_spec'], redChar['z_phot'], zmin=zCharacteristic)
             print(f"Have {len(redChar['z_spec'])} objects in {ftempl}")
-            """deltaZ = (redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec'])
-            deltaZ_all = (redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec'])
-            outliers = (deltaZ > 0.15) | (deltaZ < -0.15)
-            outliers_all = (deltaZ_all > 0.15) | (deltaZ_all < -0.15)
-            bias = np.mean(deltaZ)
-            scatter = np.std(deltaZ)"""
             deltaZ = deltaZ_s[mode][i]
             deltaZ_all = deltaZ_all_s[mode][i]
             outliers = outliers_s[mode][i]
@@ -190,65 +618,22 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
             scatter = scatter_s[mode][i]
             eta = etas_s[mode][i]
             
-
-
-            #outpath = outpaths.format(ftempl=ftempl, runTime=runTime)
-
-            """#find light intensities
-            ids = df_props['id'].values
-            filtTab = Table.read(inpath, hdu=4)
-            #get values ending with "CIRC1"
-            pointIDs = filtTab['ID']
-            filtTab = filtTab[[f for f in filtTab.colnames if f.endswith('CIRC1')]]
-            #get dictionary version of table
-            filtTab = filtTab.to_pandas()
-            keys = filtTab.keys()
-            fluxes = np.array([np.array(filtTab[key]) for key in keys]).T
-            pointIntensities = np.sum(fluxes, axis=1)"""
-
-            """#clear up bad ids and make simular sort
-            for j,id in list(enumerate(ids))[::-1]:
-                if id not in df_props['id'].values:
-                    pointIntensities = np.delete(pointIntensities, j)
-                    ids = np.delete(ids, j)
-            #sort pointIntensities and ids to match df_props
-            pointIntensities = pointIntensities[np.argsort(ids)]
-            ids = np.sort(ids)
-            antiSort = np.argsort(df_props['id'].values)
-            sort = np.argsort(antiSort)
-            pointIntensities = pointIntensities[sort]
-            ids = ids[sort]"""
             #Remove sub zero and nan
-            mask_cur = (redshiftTbl['z_spec'] > 0) & (~np.isnan(redshiftTbl['z_spec'])) & (~np.isnan(redshiftTbl['z_phot'])) & (redshiftTbl['z_phot'] > 0)
             x = np.array(redshiftTbl['z_spec'])
             y = np.array(redshiftTbl['z_phot'])
-            #above = y > x + (1 + x) * 0.15 # outliers
-            #below = y < x - (1 + x) * 0.15
-            #outlier = above | below
-            #mask_in = mask_cur & (~outlier)
-            x = x[mask_cur]
-            y = y[mask_cur]
-            #mask_out = mask_cur & outlier
-            #chi2_fit = redshiftTbl['z_phot_chi2'][mask_cur]/len(redshiftTbl.keys())#!new
-            #avgchi2_fit = np.mean(chi2_fit)
-            #medchi2_fit = np.median(chi2_fit)
             
-            #avgchi2_fit_in = redshiftTbl['z_phot_chi2'][mask_in]/len(x)#!new
-            #c = np.log10(pointIntensities[mask_cur])*((x/(1+x))**2)#!quilitative reshift scaling
-            #c = np.ones(len(x))
+            
+            x, y, _ = clean_phots(x, y, zmin=0)
 
             #calculate chi2 with linear regression of x and y
             chi2 = np.sum((y - x)**2/1)/len(x)#/len(x)#!dunno what to put for sigma
 
             xmin, xmax = np.c_[[x, y]].min(), np.c_[[x, y]].max()
 
-            #axsMos[i].scatter(x, y, s=2.0, color='k')
-            #hexbin with colorbar
-            #axsMos[i].hexbin(x, y, gridsize=30, mincnt=1, edgecolors='none', bins='log')
             underCharc = (x < zCharacteristic)
             x_under, y_under = x[underCharc], y[underCharc]
-            axsMos[i].hexbin(x_under, y_under, gridsize=30, mincnt=1, edgecolors='none', bins='log', cmap='viridis', alpha=0.2, extent=[xmin, xmax, xmin, xmax],zorder=200)
-            axsMos[i].hexbin(redChar['z_spec'], redChar['z_phot'], gridsize=30, mincnt=1, edgecolors='none', bins='log', cmap='viridis', extent=[xmin, xmax, xmin, xmax])
+            axsMos[i].hexbin(x_under, y_under, gridsize=30, mincnt=1, edgecolors='none', cmap='viridis', alpha=0.2, extent=[xmin, xmax, xmin, xmax],zorder=200)
+            axsMos[i].hexbin(redChar['z_spec'], redChar['z_phot'], gridsize=30, mincnt=1, edgecolors='none', cmap='viridis', extent=[xmin, xmax, xmin, xmax])
 
             #plt.colorbar(axsMos[i].collections[0], ax=axsMos[i], label='log$_{10}$(N)')
             axsMos[i].plot([0, 100], [0, 100], c='r', ls='--', lw=0.5)
@@ -259,18 +644,26 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
             #annotate in top left
             annotAnchor = (0.05, 0.95)
             #axsMos[i].set_title(f'{ftempl}', fontsize=10)
-            ax, ay = 2, 95        
-            axsMos[i].annotate(f'{mode_ftempl_lbls[i]}', xy=annotAnchor, xycoords='axes fraction', fontsize=10, ha='left', va='top', xytext=(ax, ay), textcoords='axes points')
+            ax, ay = 50, 95        
+            axsMos[i].annotate(f'{mode_ftempl_lbls[i]}', xy=annotAnchor, xycoords='axes fraction', fontsize=10, ha='left', va='top', xytext=(ax-48, ay), textcoords='axes points')
 
             #stats annotate
-            sx, sy = 44, -55
-            axsMos[i].annotate(f'$\eta$={round(eta,3):.3f}', xy=annotAnchor, xycoords='axes fraction', fontsize=7, ha='left', va='top', xytext=(ax+sx, ay+sy), textcoords='axes points')
+            sx, sy = 43, -51
+            etastr = (eta.procent() + "$").replace("%", "\%")
+            axsMos[i].annotate(f'$\eta={etastr}', xy=annotAnchor, xycoords='axes fraction', fontsize=5.8, ha='right', va='top', xytext=(ax+sx, ay+sy), textcoords='axes points')
             #etas = np.append(etas, eta**(-1))
             if mode_ftempl_lbls[i] == 'F45k' or mode_ftempl_lbls[i] == 'F60k': asterix = '*'
             else: asterix = ''
             #axsMos[i].annotate(f'$\eta_{{0+}}$={round(outliers_all.sum()/len(outliers_all),2):.2f}{asterix}', xy=annotAnchor, xycoords='axes fraction', fontsize=8, ha='left', va='top', xytext=(ax+sx, ay+sy-10), textcoords='axes points')
-            axsMos[i].annotate(f'$\sigma_{{nmad}}$={round(np.median(np.abs(deltaZ[~outliers] - np.median(deltaZ[~outliers])))*1.4826,3):.3f}', xy=annotAnchor, xycoords='axes fraction', fontsize=7, ha='left', va='top', xytext=(ax+sx, ay+sy-10), textcoords='axes points')
-            axsMos[i].annotate(f'$\Delta_{{bias}}$={round(bias,3):.3f}', xy=annotAnchor, xycoords='axes fraction', fontsize=7, ha='left', va='top', xytext=(ax+sx, ay+sy-20), textcoords='axes points')
+            vals = np.array([v.x for v in deltaZ[~outliers]])
+            errs = np.array([v.pm for v in deltaZ[~outliers]])
+            sigma = np.median(np.abs(vals - np.median(vals)))*1.4826
+            #sigma_err = np.median(np.abs(errs - np.median(errs)))*1.4826
+            sigma = sci_val(sigma, np.nan)
+            sigmastr = sigma.procent().replace("nan", "?")
+            biasstr = (bias.procent() + "$").replace("%", "\%")
+            axsMos[i].annotate(f'$\sigma_{{nmad}}$={sigmastr}', xy=annotAnchor, xycoords='axes fraction', fontsize=5.8, ha='right', va='top', xytext=(ax+sx, ay+sy-10), textcoords='axes points')
+            axsMos[i].annotate(f'$\Delta_{{bias}}={biasstr}', xy=annotAnchor, xycoords='axes fraction', fontsize=5.8, ha='right', va='top', xytext=(ax+sx, ay+sy-20), textcoords='axes points')
 
 
             axsMos[i].set_xlim(zmin,zMax)
@@ -315,23 +708,28 @@ def plot(df_out,ftempl_strs,ftempl_labels,runTime):
 
 import pandas as pd
 
-def table(df_out,ftempl_strs,ftempl_labels,runTime):
+def table(df_out,df_out_resamplings,ftempl_strs,ftempl_labels,runTime):
     global etasStartIndex
     global etas
     etasStartIndex = 0
     etas = []
     #precalc stats
-    deltaZ_s = {'default':[], 'modified':[]}
-    deltaZ_all_s = {'default':[], 'modified':[]}
-    outliers_s = {'default':[], 'modified':[]}
-    outliers_all_s = {'default':[], 'modified':[]}
-    bias_s = {'default':[], 'modified':[]}
-    bias_all_s = {'default':[], 'modified':[]}
-    scatter_s = {'default':[], 'modified':[]}
-    scatter_all_s = {'default':[], 'modified':[]}
-    etas_s = {'default':[], 'modified':[]}
-    etas_all_s = {'default':[], 'modified':[]}
-
+    deltaZ_s, deltaZ_all_s, outliers_s, outliers_all_s, bias_s, bias_all_s, scatter_s, scatter_all_s, etas_s, etas_all_s = get_stats_organized(df_out,ftempl_strs,ftempl_labels, zmin=zCharacteristic)
+    deltaZ_s_res, deltaZ_all_s_res, outliers_s_res, outliers_all_s_res, bias_s_res, bias_all_s_res, scatter_s_res, scatter_all_s_res, etas_s_res, etas_all_s_res = get_stats_organized_resamples(df_out_resamplings,ftempl_strs,ftempl_labels, zmin=zCharacteristic)
+    for mode in ['default', 'modified']:# if resamplings available, overwrite
+        for i in range(len(deltaZ_all_s_res[mode])):
+            if len(deltaZ_all_s_res[mode][i]) > 0:
+                deltaZ_s[mode][i] = deltaZ_s_res[mode][i]
+                deltaZ_all_s[mode][i] = deltaZ_all_s_res[mode][i]
+                outliers_s[mode][i] = outliers_s_res[mode][i]
+                outliers_all_s[mode][i] = outliers_all_s_res[mode][i]
+                bias_s[mode][i] = bias_s_res[mode][i]
+                bias_all_s[mode][i] = bias_all_s_res[mode][i]
+                scatter_s[mode][i] = scatter_s_res[mode][i]
+                scatter_all_s[mode][i] = scatter_all_s_res[mode][i]
+                etas_s[mode][i] = etas_s_res[mode][i]
+                etas_all_s[mode][i] = etas_all_s_res[mode][i]
+    
     for mode in ['default', 'modified']:
         mode_ftempl_lbls = copy(ftempl_labels)
         mode_ftempl_strs = copy(ftempl_strs)
@@ -342,81 +740,8 @@ def table(df_out,ftempl_strs,ftempl_labels,runTime):
             mode_ftempl_lbls = [s for s in mode_ftempl_lbls if ";" not in s]
             mode_ftempl_strs = [s for s in mode_ftempl_strs if ";" not in s]
         if len(mode_ftempl_lbls) == 0: continue
-        for i, ftempl in enumerate(mode_ftempl_strs):
-            if ftempl not in df_out.keys():
-                continue
-            redshiftTbl = df_out[ftempl]
-            validMask = (~np.isnan(redshiftTbl['z_spec'])) & (~np.isnan(redshiftTbl['z_phot']) & (redshiftTbl['z_phot'] > 0) & (redshiftTbl['z_spec'] > 0))
-            redshiftTbl = redshiftTbl[validMask]
-            redChar = {
-                'z_spec': np.array(redshiftTbl['z_spec']),
-                'z_phot': np.array(redshiftTbl['z_phot']),
-            }
-            maskChar = (redChar['z_spec'] > zCharacteristic) & (~np.isnan(redChar['z_spec'])) & (~np.isnan(redChar['z_phot']) & (redChar['z_phot'] > 0))
-            redChar['z_spec'] = redChar['z_spec'][maskChar]
-            redChar['z_phot'] = redChar['z_phot'][maskChar]
-            deltaZ = (redChar['z_phot'] - redChar['z_spec'])/(1 + redChar['z_spec'])
-            deltaZ_s[mode].append(deltaZ)
-            deltaZ_all = (redshiftTbl['z_phot'] - redshiftTbl['z_spec'])/(1 + redshiftTbl['z_spec'])
-            #goodMask = (~np.isnan(deltaZ_all)) & (~np.isnan(redshiftTbl['z_spec'])) % (~np.isinf(deltaZ_all))
-            #deltaZ_all = deltaZ_all[goodMask]
-            deltaZ_all_s[mode].append(deltaZ_all)
-            outliers = (deltaZ > 0.15) | (deltaZ < -0.15)
-            outliers_s[mode].append(outliers)
-            outliers_all = (deltaZ_all > 0.15) | (deltaZ_all < -0.15)
-            outliers_all_s[mode].append(outliers_all)
-            bias = np.mean(deltaZ)
-            bias_s[mode].append(bias)
-            bias_all = np.mean(deltaZ_all)
-            bias_all_s[mode].append(bias_all)
-            scatter = np.std(deltaZ)
-            scatter_s[mode].append(scatter)
-            scatter_all = np.std(deltaZ_all)
-            scatter_all_s[mode].append(scatter_all)
-            eta = np.sum(outliers)/len(outliers)
-            etas_s[mode].append(eta)
-            eta_all = np.sum(outliers_all)/len(outliers_all)
-            etas_all_s[mode].append(eta_all)
-
         df = {}
-        def rnd_p(x):
-            #print(x)
-            def rnd(x:float):
-                #print("ROunDING")
-                significantDigit = np.floor(np.log10(np.abs(x))) - 1
-                rounded = round(x, -int(significantDigit))#, int(significantDigit)
-                #to string
-                rounded = str(rounded)
-                if significantDigit < 0:
-                    #print(rounded.split("."))
-                    #print(rounded)
-                    #print([rounded.split(".")[1][:-int(significantDigit)]])
-                    rounded = ".".join([rounded.split(".")[0]] + [rounded.split(".")[1][:-int(significantDigit)]])
-                    #print(rounded)
-                    #print([rounded.split(".")])
-                    #print(rounded)
-                    leadingDigits = rounded.split(".")[1]
-                    while leadingDigits.startswith("0"): leadingDigits = leadingDigits[1:]
-                    while len(leadingDigits) < 2:
-            
-                        #print("loop " + leadingDigits)
-                        rounded += "0"
-                        leadingDigits = rounded.split(".")[1]
-                        while leadingDigits.startswith("0"): leadingDigits = leadingDigits[1:]
-                    #print(rounded)
-                return rounded
-            try:
-                float(x)
-                int(x)
-            except:
-                try:
-                    float(x[0])
-                    int(x[0])
-                    r = [rnd(i) for i in x]
-                    return r#, s
-                except:
-                    return x#, None
-            return rnd(x)
+        
             
         insertions = {
             #'deltaZ': 'deltaZ_s[{mode}]',
@@ -443,28 +768,32 @@ def table(df_out,ftempl_strs,ftempl_labels,runTime):
             #x, digit = rnd_p(eval(insertions[key].format(mode=repr(mode))))
             df[key] = eval(insertions[key].format(mode=repr(mode)))
         print(df)
-        """#df['deltaZ'] += deltaZ_s[mode]
-        #df['deltaZ_all'] += deltaZ_all_s[mode]
-        #df['outliers'] += outliers_s[mode]
-        #df['outliers_all'] += outliers_all_s[mode]
-        df['bias'] += bias_s[mode]
-        df['bias_all'] += bias_all_s[mode]
-        df['scatter'] += scatter_s[mode]
-        df['scatter_all'] += scatter_all_s[mode]
-        df['eta'] += etas_s[mode]
-        df['eta_all'] += etas_all_s[mode]"""
+
         df = pd.DataFrame(df)
         for key in df.keys():
             for i in range(len(df[key])):
-                df[key][i] = rnd_p(df[key][i])
+                #df[key][i] = rnd_p(df[key][i])
+                if type(df[key][i]) == sci_val:
+                    """df[key][i].x *= 100
+                    df[key][i].r *= 100
+                    df[key][i].pm *= 100
+                    df[key][i].pmr *= 100
+                    df[key][i].n -= 2
+                    df[key][i] = "[" + str(df[key][i]) + "]\%"#!potentielt lav øvre nedre +- formattering her"""
+                    df[key][i] = df[key][i].procent().replace("%","\%")
         cmap = mpl.cm.RdYlGn
         colortable = []
         for key in list(df.keys())[1:]:
-            min = np.min(np.abs(df[key].values.astype(float))**-1)
-            max = np.max(np.abs(df[key].values.astype(float))**-1)
+            if "±" in df[key][0]:
+                values = np.array([float(s.split("±")[0].split("[")[-1]) for s in df[key]])
+            elif "^" in df[key][0]:
+                values = np.array([float(s.split("^")[0].split("[")[-1]) for s in df[key]])
+            #errs = np.array([float(s.pm) for s in df[key]])
+            min = np.min(np.abs(values.astype(float))**-1)
+            max = np.max(np.abs(values.astype(float))**-1)
             colortable.append([])
             for i in range(len(df[key])):
-                colortable[-1].append(np.array(cmap((np.abs(float(df[key][i]))**-1 - min)/(max-min))[:-1]))
+                colortable[-1].append(np.array(cmap((np.abs(float(values[i]))**-1 - min)/(max-min))[:-1]))
                 #colortable[-1][-1][-1] = 0.1
                 colortable[-1][-1] *= 1.2
                 colortable[-1][-1] = np.clip(colortable[-1][-1], 0, 1)
@@ -472,11 +801,15 @@ def table(df_out,ftempl_strs,ftempl_labels,runTime):
 
         #print(df)
         #save latex to txt file
-        with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'w') as f:
+        with open(f'./figures/forpaper/zs_table_temp_{runTime}.tex', 'w') as f:
             f.write(df.to_latex(index=False))
         texlines = []
-        with open(f'./figures/forpaper/zs_table_{runTime}.tex', 'r') as f:
+        with open(f'./figures/forpaper/zs_table_temp_{runTime}.tex', 'r') as f:
             texlines = f.readlines()
+        try:
+            os.remove(f'./figures/forpaper/zs_table_temp_{runTime}.tex')
+        except FileNotFoundError:
+            pass
         for i in range(len(texlines)):
             if texlines[i].startswith("\\begin{tabular}"):
                 texlines[i] = "\\begin{deluxetable}{c|cccccc}[H]\n"
