@@ -1,5 +1,5 @@
 CONFIG:
-  zmin: 1.0
+  zmin: 0.1
   rebinWidth: 0.05
   zCharacteristic: 5.0
   fontsize: 8.0
@@ -11,4 +11,6 @@ MOSAICZ:
   mm: '1/25.4'
   figwidth: '183*mm'
   DPI: 500
-  ro: 2
+  ro: 0.5
+  SEM: True
+  sigmas: 3

@@ -2,3 +2,7 @@ templates
 astrodata
 eazy-output
 test.py
+*.param
+*.zip
+*.sav
+*.zphot.param

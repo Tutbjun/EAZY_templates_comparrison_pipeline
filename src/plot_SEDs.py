@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 from astropy import units as u
 from utils_math import rebin
 from matplotlib.colors import LinearSegmentedColormap
+from matplotlib import markers
+from copy import deepcopy
 
-def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None, logy=False,color_after_chi=False):
+def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None, logy=False,color_after_chi=False, residual=False):
     global fontsize
     if len(photZs['specs'].keys()) == 0:
         print("No spectra found...")
@@ -31,7 +33,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
         #show_components=True,
         zshow=z_spec,#!best guess
         xlim=[0.35, 10.0], 
-        
+        template_color='tab:orange',
         show_missing=True,#!these are the hexagons
         show_stars=False, snr_thresh=1.0,
         show_fnu=True,
@@ -61,9 +63,16 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
             #obj.set_marker('x')
             obj.set_alpha(0)
         if k == 3: 
-            obj.set_linewidth(1)#best fit
+            obj.set_linewidth(0.8)#best fit
+            if residual:
+                obj.set_alpha(0.5)
             obj.set_alpha(0.5)
             obj.set_zorder(19)
+            #set label
+            if not residual:
+                obj.set_label(r'$Model Spec._{z_{spec}}$')
+            else:
+                obj.set_label(r'$Spec. Residual_{z_{spec}}$')
             #if color_after_chi: obj.set_alpha(0)
         #obj.set_visible(False)
     #and errorbars
@@ -114,8 +123,18 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     #use rebin function
     #tempspec_zphot = [targetWave, np.interp(targetWave, tempspec_zphot[0], tempspec_zphot[1])]
     flux_rebin, _ = rebin(tempspec_zphot[0], tempspec_zphot[1], targetWave, np.ones(len(data_phot['templf']), dtype=np.float64))#!Don't think there is a error for best template fit? Please check:)
+    #if residual:
+    #    flux_rebin -= spec_data['flux']
     tempspec_zphot = [targetWave, flux_rebin]
-    axis.plot(tempspec_zphot[0], tempspec_zphot[1], c='tab:orange', lw=1, ls='--',alpha=0.9,zorder=20)
+    temp_flux = tempspec_zphot[1]
+    lw = 0.8
+    if residual:
+        temp_flux = spec_data['flux']-tempspec_zphot[1]
+        lw = 0.5
+        #temp_flux -= spec_data['flux']
+    lbl = r'$Model Spec._{z_{phot}}$'
+    if residual: lbl = r'$Spec. Residual_{z_{phot}}$'#!sheit here! variable sais zphot, but label zspec
+    axis.plot(tempspec_zphot[0], temp_flux, c='tab:blue', lw=lw, ls='--',alpha=0.9,zorder=20,label=lbl)
     #if i == 0: axis.set_title(f'{includeChi2s[j]*100:.0f}%-tile $\chi^2$', fontsize=fontsize*2)
     if includeChi2Val != None:
         plt.title(f'{includeChi2Val*100:.0f}%-tile $\chi^2$', fontsize=fontsize_local*2)
@@ -137,9 +156,12 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     axis.annotate(f'$\Delta z$≈{z_phot-z_spec:.1f}', xy=(anXs[3],anYs[3]), xycoords='axes fraction', fontsize=fontsize_local, ha='left', va='center', textcoords='offset points', xytext=(0,0))
 
     #plot spec data
-    
-    axis.plot(spec_data['wave'], spec_data['flux'], c='k', lw=0.5, ls='-', alpha=0.6, label="Current spectra")#!added this, validate
-    axis.fill_between(spec_data['wave'], spec_data['flux']-spec_data['flux_err'], spec_data['flux']+spec_data['flux_err'], color='k', alpha=0.2, lw=0, zorder=25)
+    temp_flux = deepcopy(spec_data['flux'])
+    """if residual:
+        temp_flux -= spec_data['flux']"""
+    if not residual:
+        axis.plot(spec_data['wave'], temp_flux, c='k', lw=0.5, ls='-', alpha=0.6, label="Current spectra")#!added this, validate
+        axis.fill_between(spec_data['wave'], temp_flux-spec_data['flux_err'], temp_flux+spec_data['flux_err'], color='k', alpha=0.2, lw=0, zorder=25)
 
     #rebin model spectra to simular wavelength intervals
     intervals = np.array([spec_data['wave'][k+1] - spec_data['wave'][k] for k in range(len(spec_data['wave'])-1)])
@@ -197,7 +219,7 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     xMax = axis.get_xlim()[1]
     xMin = axis.get_xlim()[0]
     axis.set_xlim((xMin:=xMin), (xMax:=5))#!chaning xMin ruins the xticks
-    axis.set_ylim(-axis.get_ylim()[1]*0.4, axis.get_ylim()[1]*1)#NOTE did a thing here;)
+    axis.set_ylim(-axis.get_ylim()[1]*0.4, axis.get_ylim()[1]*1.2)#NOTE did a thing here;)
     topSort = np.argsort(x_fill_top)
     botSort = np.argsort(x_fill_bot)
     x_fill_top = x_fill_top[topSort]
@@ -217,6 +239,8 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     """plt.plot(targetWave, targetFlux_yfill_top)
     plt.plot(targetWave, targetFlux_yfill_bot)
     plt.show()"""
+    if residual:
+        targetFlux = spec_data['flux']-targetFlux
 
     addWave = targetWave[-1] + meanInterval
     while addWave < x_fit[-1] and addWave < xMax:
@@ -239,8 +263,12 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
     targetFlux_xfill = np.append(targetWave, targetWave[::-1])
     targetFlux_yfill = np.append(targetFlux_yfill_bot, targetFlux_yfill_top[::-1])
 
+    #if residual:
+    #    targetFlux -= spec_data['flux']
     axis.lines[3].set_xdata(targetWave)
     axis.lines[3].set_ydata(targetFlux)
+    #if residual:
+    #    targetFlux_yfill -= spec_data['flux']
     axis.collections[5]._paths[0].verticies = np.array([targetFlux_xfill, targetFlux_yfill]).T
 
     #if y is badly scaled:
@@ -252,9 +280,12 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
         axis.set_ylim(ylim_min, np.max(targetFlux[np.where(targetWave <  xlim_max)]))
 
     #if ylog
-    if logy:
+    if logy and not residual:
         axis.set_yscale('log')
         axis.set_ylim(ylim_max/100, ylim_max*5)
+    elif logy and residual:
+        #axis.set_yscale('symlog')
+        axis.set_ylim(-ylim_max/10, ylim_max/10)
 
     data_spec = pz_out.show_fit(id=id_cat, zshow=z_spec, get_spec=True, show_fnu=True)
     if color_after_chi:
@@ -279,11 +310,37 @@ def plotSED(axis, photZs, id_cat, ftempl, ftempl_labeldict, includeChi2Val=None,
         colors = [(0, 0, 0), (1, 0, 0)] # first color is black, last is red
         cmap = LinearSegmentedColormap.from_list(
             "Custom", colors, N=20)
+        maxRange = 0
         for i, chi2 in enumerate(chi2s):
-            axis.scatter(w[i]/10000, fobs[i], c=cmap(chi2/chi2s.max()), s=10, zorder=20)
-            axis.scatter(w[i]/10000, fgues[i], c='tab:orange', s=10, zorder=19)
-            axis.errorbar(w[i]/10000, fobs[i], yerr=ferr[i], c=cmap(chi2/chi2s.max()), zorder=20)
+            if not residual:
+                c = cmap(chi2/chi2s.max())
+                fobs_temp = fobs[i]
+                fgues_temp = fgues[i]
+            else: 
+                c = cmap(chi2/chi2s.max())#'k'
+                fobs_temp = fobs[i]-fgues[i]
+                fgues_temp = 0
+            #if not residual:
+            axis.scatter(w[i]/10000-0.03, fobs_temp, c=c, s=25, zorder=20, marker='4',linewidths=0.5)#,label=r"$Photometry$")
+            if np.abs(fobs_temp) > maxRange: maxRange = np.abs(fobs_temp)
+            if not residual:
+                axis.scatter(w[i]/10000+0.03, fgues_temp, c='tab:blue', s=25, zorder=21,marker='3',linewidths=0.5,label=r'$Model Phot.$')
+            if np.abs(fgues_temp) > maxRange: maxRange = np.abs(fgues_temp)
+            axis.errorbar(w[i]/10000, fobs_temp, yerr=ferr[i], c=c, zorder=20, lw=0.5, capsize=2, capthick=0.5, marker='none')
+            if np.abs(ferr[i]) > maxRange: maxRange = np.abs(ferr[i])
+            if i == 0:
+                #if not residual:
+                lbl = r"$Phot.$"
+                if residual: lbl = r"$Residual$"
+                axis.scatter(-1000,0, c='k', s=25, zorder=25, marker='4',linewidths=0.5,label=lbl)#dummy photomtry
+                axis.legend(loc='upper left', fontsize=fontsize_local*0.8, ncol=3, framealpha=0.5, handletextpad=0.1, columnspacing=0.2, borderpad=0.1, labelspacing=0.1, borderaxespad=0.2)
 
+        if residual:
+            #if maxRange > axis.get_ylim()[1]:
+            if maxRange > axis.get_ylim()[1]:
+                axis.set_ylim(-maxRange*1.2, maxRange*1.2)
+            if maxRange < 2e-3:
+                axis.set_ylim(-2.4e-3, 2.4e-3)
     #set non-log axis
     axis.set_xscale('linear')
     ylabel = axis.get_ylabel().replace('\\mu', 'n')

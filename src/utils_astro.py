@@ -35,17 +35,18 @@ ftempl_labeldict = {#! use ; to indicate modifications
     'blue_sfhz_13': "BLSFH",
     'carnall_sfhz_13': "CASFH",
     #'corr_sfhz_13': "COSFH",
-    'eazy_v1.3.spectra': "EAZ3",
+    'eazy_v1.3.spectra': "EAZY3",
     #'EMextreme': "EMEx",
-    'EMlines_Nathans': "EMLi",
+    'EMlines_Nathans': "Adam22",
     #'EMLines;linearcomb': "EMLi;LC",
-    'fsps_45k_steinhardt': "F45k",
+    'fsps_45k_steinhardt': "Stein23",
     #'fsps_60k': "F60k",
     #'fsps_45k;linearcomb': "F45k;LC",
     #'fsps_45k;0.3removed': "F45k;0.3r",
-    'QSF_12_v3_newtemplates_Larson': "Lar22",
-    'Kirkpatrick': "Kir12",
-    'beta.spectra_Wilkins': "Wil22"
+    'QSF_12_v3_newtemplates_Larson': "Lars23",
+    #'Kirkpatrick': "Kir12",
+    'beta.spectra_Wilkins': "Wilk22"
+    #!smith15?
 }
 
 """catalogue_paths = {
@@ -196,16 +197,33 @@ def errorresample_catalogue(tab, filter_systematics, seed=None):
     else: np.random.seed(int((time.time()%100*10000)))
     stds = filter_systematics
     avgs = np.ones(len(filter_systematics))
-    resamps = np.ones(len(filter_systematics))
+    #get any filter flux
+    aFiltFlux = [c for c in tab.colnames if 'flux' in c][0]
+    resamps = np.ones((len(filter_systematics),len(tab[aFiltFlux])))#np.zeros(len(filter_systematics))
+    #insert systematics
     for i in range(len(filter_systematics)):
         if stds[i] == 0: continue
-        resamps[i] = np.random.normal(avgs[i], stds[i], 1)[0]
-    #apply systematics
+        resamps[i] *= np.random.normal(avgs[i], stds[i], 1)[0]
+    #varry by errorbar
+    fluxes = np.array([tab[c] for c in tab.colnames if 'flux' in c])
+    errors = np.array([tab[c] for c in tab.colnames if 'err' in c]) 
+    relative_errors = np.abs(errors / fluxes)
+    for i in range(len(filter_systematics)):
+        for j in range(len(tab[aFiltFlux])):
+            if relative_errors[i][j] == 0 or np.isnan(relative_errors[i][j]): continue
+            oldval = resamps[i][j]
+            resamps[i][j] *= np.random.normal(1, relative_errors[i][j], 1)[0]
+            if np.isnan(resamps[i][j]) or np.isinf(resamps[i][j]):
+                resamps[i][j] = oldval
+    #apply resampling
+    fluxkeys = [c for c in tab.colnames if 'flux' in c]
     cols_f = np.sort(hmod.get_matches('_flux', tab.columns))
     cols_fe = np.sort(hmod.get_matches('_err', tab.columns))
-    for i in range(len(cols_f)):
-        tab[cols_f[i]] *= resamps[i]
-        tab[cols_fe[i]] *= resamps[i]
+    for i,key in enumerate(fluxkeys):
+        for j in range(len(tab[key])):
+            tab[key][j] *= resamps[i][j]
+        #tab[cols_f[i]] *= resamps[i]
+        #tab[cols_fe[i]] *= resamps[i]
     #done
     return tab
 
@@ -241,6 +259,8 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
     cols_fluxes = list(np.vstack([cols_f, cols_fe]).T.flatten())
     cols = list(np.insert(cols_fluxes, 0, ['ID', 'RA', 'DEC', 'z_spec']))
 
+    
+
     #check wether z_spec is available
     if 'z_spec' not in tab_redshifts.colnames:
         tab_redshifts = get_secondarry_zpec(reverting_catalogues)
@@ -250,8 +270,15 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
         tab_in = jointab(tab_in, tab_redshifts['ID', 'z_spec'], join_type='inner', keys='ID')
     tab_out = tab_in[cols]#! Is this filtering fluxes out of filters that might have data??
 
+    keys2keep = [e.split('_')[0].upper() for e in tab_out.colnames if 'flux' in e]
+    keys2keep = np.unique(keys2keep)
+    filter_systematics_list = []
+    for k in keys2keep:
+        if filter_systematics is not None:
+            filter_systematics_list.append(filter_systematics[k])
+
     # convert from nJy to uJy
-    # and apply MW reddening
+    # and apply MW reddening#!what is this??? why is it redenned?
     keys = np.array(list(mw_reddening.keys()))
     for c in cols_fluxes:
         # convert from nJy to uJy
@@ -279,7 +306,7 @@ def catalogue_2_eazytable(catalogue_inpath:str, cat_out_name, reverting_catalogu
     path_out = f"temp/{cat_out_name}.fits"
     if do_resample:
         if filter_systematics is None: raise ValueError("No filter_systematics given!")
-        tab_out = errorresample_catalogue(tab_out, filter_systematics)
+        tab_out = errorresample_catalogue(tab_out, filter_systematics_list)
         path_out = f"temp/{cat_out_name}_resampled.fits"
 
     #=== apply MW reddening
@@ -350,13 +377,14 @@ def get_outpaths(eazy_out, cat_out_name, ftempl_strs, runtimeNum=-1):
 def get_resampled_outpaths(eazy_out, cat_out_name, ftempl_strs, runtimeNum=None):
     out_paths = {}
     resample_folders = os.listdir(os.path.join(eazy_out, 'resamples'))
+    resample_folders = [f for f in resample_folders if f.startswith('resample_')]
     resample_folders = np.sort([f for f in resample_folders if len(os.listdir(os.path.join(eazy_out, 'resamples', f))) > 0])
     for ftemplstr in ftempl_strs:
         out_paths[ftemplstr] = []
         for resample_folder in resample_folders:
             templates_infolder = os.listdir(os.path.join(eazy_out, 'resamples', resample_folder))
-            if templates_infolder[0] == 'eazy-output':
-                resample_folder = os.path.join(resample_folder, 'eazy-output')
+            if templates_infolder[0] == eazy_out:
+                resample_folder = os.path.join(resample_folder, eazy_out)
                 templates_infolder = os.listdir(os.path.join(eazy_out, 'resamples', resample_folder))
             templates_infolder_names = ["_".join(f.split('_')[:-1]) for f in templates_infolder]
             """if len(templates_infolder_names) == 1 and templates_infolder_names[0] == '':
